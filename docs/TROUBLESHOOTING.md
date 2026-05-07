@@ -106,7 +106,7 @@ x64/Release/
 The file names are listed in:
 
 ```text
-DuetCloneNew/WinSideUSB.rc
+WinSideUSB/WinSideUSB.rc
 ```
 
 Place those binaries before building `WinSideUSB.sln`, or adjust the resource file for your local packaging strategy.

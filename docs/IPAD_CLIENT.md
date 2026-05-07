@@ -3,10 +3,18 @@
 The iPad side is currently a Swift source file:
 
 ```text
-DuetCloneNew/swiftclientcode.swift
+WinSideUSB/swiftclientcode.swift
 ```
 
 It can be copied into Swift Playgrounds or moved into a normal iOS app target.
+
+## Device Coverage
+
+The client itself is not hard-coded to one iPad screen size; it displays the incoming H.264 stream inside an `AVSampleBufferDisplayLayer` that fills the current view.
+
+The Windows app chooses the virtual-display mode from a `ProductType` database. The current database includes known iPad, iPad Air, iPad mini, and iPad Pro identifiers through May 2026.
+
+Unknown future iPads are allowed to start with conservative 60 Hz fallback modes. Add a real preset later if the native resolution or refresh rate differs from the fallback list.
 
 ## Runtime Flow
 
@@ -88,8 +96,8 @@ The CSV includes:
 If ports must be changed, update both files:
 
 ```text
-DuetCloneNew/WinSideUSB.cpp
-DuetCloneNew/swiftclientcode.swift
+WinSideUSB/WinSideUSB.cpp
+WinSideUSB/swiftclientcode.swift
 ```
 
 Keep the handshake strings versioned when changing transport behavior. That prevents old Playgrounds runs from being mistaken for the current app.

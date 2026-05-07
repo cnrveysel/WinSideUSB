@@ -30,7 +30,7 @@ final class VideoReceiver: NSObject, ObservableObject {
     private var listenFd: Int32 = -1
     private var clientFd: Int32 = -1
     private var socketListenerStarted = false
-    private let parseQueue = DispatchQueue(label: "com.duet.parse", qos: .userInteractive)
+    private let parseQueue = DispatchQueue(label: "com.winsideusb.parse", qos: .userInteractive)
     private var rx = Data()
     private let listenPorts: [UInt16] = [17326, 17325, 17324, 17323, 17322, 17321]
     private var activeListenPort: UInt16 = 0
@@ -398,7 +398,7 @@ final class VideoReceiver: NSObject, ObservableObject {
         resetLogCounters()
 
         guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-        let name = "duet_rx_\(Int(Date().timeIntervalSince1970)).csv"
+        let name = "winsideusb_rx_\(Int(Date().timeIntervalSince1970)).csv"
         let url = dir.appendingPathComponent(name)
         guard FileManager.default.createFile(atPath: url.path, contents: nil),
               let handle = try? FileHandle(forWritingTo: url) else {
@@ -533,7 +533,7 @@ final class VideoReceiver: NSObject, ObservableObject {
                     self.waitingForSync = false
                     DispatchQueue.main.async {
                         self.displayLayer?.sampleBufferRenderer.flush()
-                        self.debug = "CFG OK | 2732x2048 120Hz"
+                        self.debug = "CFG OK | video stream ready"
                         self.status = "Yayin aliniyor..."
                     }
                 } else if !firstConfigFailLogged {

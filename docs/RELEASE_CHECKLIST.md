@@ -29,8 +29,8 @@
 - `*.pdb`, `*.ilk`, `*.obj`
 - `*.cat`, `*.cer`, `*.pfx`, `*.pvk`, `*.spc`
 - `*.csv`, `*.etl`, `*.evtx`, `*.dmp`, `*.mdmp`, `*.hdmp`
-- `DuetCloneNew/output_test.mp4`
-- `DuetCloneNew/DuetCloneNew_New.cpp`
+- `output_test.mp4`
+- `*_New.cpp`
 - local assistant/editor folders
 
 ## Local Smoke Test

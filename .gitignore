@@ -50,8 +50,8 @@ x86/
 *.dmp
 *.mdmp
 *.hdmp
-DuetCloneNew/output_test.mp4
-DuetCloneNew/DuetCloneNew_New.cpp
+**/output_test.mp4
+**/*_New.cpp
 
 # Local assistant/editor state
 .claude/

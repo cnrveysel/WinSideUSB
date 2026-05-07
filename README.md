@@ -4,35 +4,46 @@ WinSideUSB is an experimental Windows-to-iPad USB display streamer.
 
 It creates a Windows virtual display with an Indirect Display Driver (IDD), captures that display on the GPU, encodes the frames with NVENC, and sends H.264 video to an iPad over a USB-tunneled TCP connection.
 
-The current target is an iPad Pro 12.9-inch style display at `2732x2048` and up to `120 Hz`.
+The primary tested target is an iPad Pro 12.9-inch M2-class display at `2732x2048` and up to `120 Hz`.
 
 ## Status
 
-This is a personal research project. It is not a production-ready Duet Display replacement yet.
+This is a personal research project. It is not production-ready commercial display software yet.
 
 The fast path is working well on the test machine with an NVIDIA RTX 3080 Ti Laptop GPU, but the driver is still development-signed and must be installed manually. Public distribution would require proper Microsoft driver signing.
 
+Development note: WinSideUSB was built by Veysel as a personal engineering project with ChatGPT used as an AI pair-programming and research assistant for debugging, profiling, documentation, and iterative implementation work.
+
 ## Features
 
-- USB-only iPad transport through `iproxy` / usbmux.
+- USB-only iPad transport through the libimobiledevice/usbmux toolchain.
 - On-demand Windows virtual display through a custom IDD driver.
 - GPU capture with D3D11 Desktop Duplication.
 - Native NVENC H.264 encode path.
 - Low-latency sender with latest-frame-wins behavior.
 - iPad Swift client source for Swift Playgrounds or a native iOS app target.
+- Product-type based iPad mode presets for Pro, Air, mini, and standard iPad models.
 - Resilient iPad listener handshake using `WSUSB_HELLO2` / `WSUSB_READY2`.
 - iPad port fallback over `17326` to `17321` to avoid stale Playgrounds listeners.
+
+## iPad Compatibility
+
+The Windows app reads the connected device `ProductType` with `ideviceinfo` and selects a matching resolution/FPS preset. The current source includes presets for known iPad, iPad Air, iPad mini, and iPad Pro identifiers through May 2026, including A16 iPad, M4 iPad Air, and M5 iPad Pro models.
+
+Compatibility outside the primary tested iPad is best-effort: listed models should get an appropriate mode, but each physical device still needs real testing for smoothness, scaling, thermal behavior, and USB reliability. Unknown future iPads fall back to safe 60 Hz modes instead of being rejected outright.
+
+Very old iPads are included in the Windows detection table for completeness, but they may not be practical targets for the current Swift client if they cannot run a compatible iPadOS app build.
 
 ## Repository Layout
 
 ```text
-WinSideUSB.sln                  Windows desktop streamer solution
-DuetCloneNew/WinSideUSB.cpp     Main Windows app source
-DuetCloneNew/swiftclientcode.swift
-IddSampleDriver.sln             Virtual display driver solution
-IddSampleDriver/                IDD driver source
-scripts/Install-DevDriver.ps1   Local test-driver install helper
-docs/                           Driver, iPad, troubleshooting, and release notes
+WinSideUSB.sln                 Windows desktop streamer solution
+WinSideUSB/WinSideUSB.cpp      Main Windows app source
+WinSideUSB/swiftclientcode.swift
+IddSampleDriver.sln            Virtual display driver solution
+IddSampleDriver/               IDD driver source
+scripts/Install-DevDriver.ps1  Local test-driver install helper
+docs/                          Driver, iPad, troubleshooting, and release notes
 ```
 
 ## Requirements
@@ -50,20 +61,20 @@ docs/                           Driver, iPad, troubleshooting, and release notes
 ### iPad
 
 - iPad with USB connection to the Windows host.
-- Swift Playgrounds or an iOS app target that can run `DuetCloneNew/swiftclientcode.swift`.
+- Swift Playgrounds or an iOS app target that can run `WinSideUSB/swiftclientcode.swift`.
 - The iPad app must be open before pressing Start in the Windows app.
 
 ### USB tools
 
-The Windows app embeds `iproxy.exe`, `ideviceinfo.exe`, and required libimobiledevice DLLs as resources. These binaries are not committed to the repository by default.
+The Windows app can embed `iproxy.exe`, `ideviceinfo.exe`, and required libimobiledevice DLLs as resources. These binaries are third-party runtime files and are not committed to the repository by default.
 
-Before building the app from a fresh clone, place the required libimobiledevice runtime files in:
+Before building the app from a fresh checkout, place the required libimobiledevice runtime files in:
 
 ```text
 x64/Release/
 ```
 
-The expected file names are listed in `DuetCloneNew/WinSideUSB.rc`.
+The expected file names are listed in `WinSideUSB/WinSideUSB.rc`.
 
 ## Build
 
@@ -111,7 +122,7 @@ See [docs/DRIVER.md](docs/DRIVER.md) for details.
 ## Run
 
 1. Build or install the IDD driver.
-2. Copy the current `DuetCloneNew/swiftclientcode.swift` into Swift Playgrounds or your iOS target.
+2. Copy the current `WinSideUSB/swiftclientcode.swift` into Swift Playgrounds or your iOS target.
 3. Launch the iPad app and wait for:
 
 ```text
@@ -136,7 +147,7 @@ Windows logs are written under:
 Useful files:
 
 - `winsideusb_diag.log`: connection, driver IOCTL, and cleanup events.
-- `iproxy.log`: usbmux forwarding output.
+- `iproxy.log`: USB tunnel forwarding output.
 - `winsideusb_tx_*.csv`: per-second sender/capture/encoder telemetry.
 
 iPad logs are created in the app document directory and can be shared from the overlay.
@@ -162,7 +173,7 @@ Do not commit:
 - bundled third-party binaries unless their licenses are included
 - NVIDIA SDK headers
 
-Use GitHub Releases for packaged builds. Include third-party notices for libimobiledevice and all bundled DLLs.
+Use GitHub Releases for packaged builds. Include third-party notices for libimobiledevice, `iproxy`, and every bundled DLL.
 
 ## License
 

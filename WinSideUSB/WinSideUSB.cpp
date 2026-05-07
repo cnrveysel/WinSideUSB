@@ -97,7 +97,11 @@ enum StreamStatus : WPARAM {
 struct iPadDef { const char* productType; const wchar_t* displayName; int w, h, maxFPS; };
 
 static const iPadDef g_ipadDefs[] = {
-    // iPad Pro 12.9"
+    // iPad Pro 13" / 12.9"
+    { "iPad17,3",  L"iPad Pro 13\" M5 (2025)",          2752, 2064, 120 },
+    { "iPad17,4",  L"iPad Pro 13\" M5 (2025)",          2752, 2064, 120 },
+    { "iPad16,5",  L"iPad Pro 13\" M4 (2024)",          2752, 2064, 120 },
+    { "iPad16,6",  L"iPad Pro 13\" M4 (2024)",          2752, 2064, 120 },
     { "iPad8,5",   L"iPad Pro 12.9\" 3rd gen (2018)",  2732, 2048, 120 },
     { "iPad8,6",   L"iPad Pro 12.9\" 3rd gen (2018)",  2732, 2048, 120 },
     { "iPad8,7",   L"iPad Pro 12.9\" 3rd gen (2018)",  2732, 2048, 120 },
@@ -106,11 +110,20 @@ static const iPadDef g_ipadDefs[] = {
     { "iPad8,12",  L"iPad Pro 12.9\" 4th gen (2020)",  2732, 2048, 120 },
     { "iPad13,8",  L"iPad Pro 12.9\" 5th gen M1 (2021)", 2732, 2048, 120 },
     { "iPad13,9",  L"iPad Pro 12.9\" 5th gen M1 (2021)", 2732, 2048, 120 },
+    { "iPad13,10", L"iPad Pro 12.9\" 5th gen M1 (2021)", 2732, 2048, 120 },
+    { "iPad13,11", L"iPad Pro 12.9\" 5th gen M1 (2021)", 2732, 2048, 120 },
     { "iPad14,5",  L"iPad Pro 12.9\" 6th gen M2 (2022)", 2732, 2048, 120 },
     { "iPad14,6",  L"iPad Pro 12.9\" 6th gen M2 (2022)", 2732, 2048, 120 },
-    { "iPad16,5",  L"iPad Pro 13\" M4 (2024)",          2752, 2064, 120 },
-    { "iPad16,6",  L"iPad Pro 13\" M4 (2024)",          2752, 2064, 120 },
+    { "iPad7,1",   L"iPad Pro 12.9\" 2nd gen (2017)",  2732, 2048, 120 },
+    { "iPad7,2",   L"iPad Pro 12.9\" 2nd gen (2017)",  2732, 2048, 120 },
+    { "iPad6,7",   L"iPad Pro 12.9\" 1st gen (2015)",  2732, 2048,  60 },
+    { "iPad6,8",   L"iPad Pro 12.9\" 1st gen (2015)",  2732, 2048,  60 },
+
     // iPad Pro 11"
+    { "iPad17,1",  L"iPad Pro 11\" M5 (2025)",          2420, 1668, 120 },
+    { "iPad17,2",  L"iPad Pro 11\" M5 (2025)",          2420, 1668, 120 },
+    { "iPad16,3",  L"iPad Pro 11\" M4 (2024)",          2420, 1668, 120 },
+    { "iPad16,4",  L"iPad Pro 11\" M4 (2024)",          2420, 1668, 120 },
     { "iPad8,1",   L"iPad Pro 11\" 1st gen (2018)",    2388, 1668, 120 },
     { "iPad8,2",   L"iPad Pro 11\" 1st gen (2018)",    2388, 1668, 120 },
     { "iPad8,3",   L"iPad Pro 11\" 1st gen (2018)",    2388, 1668, 120 },
@@ -123,9 +136,20 @@ static const iPadDef g_ipadDefs[] = {
     { "iPad13,7",  L"iPad Pro 11\" 3rd gen M1 (2021)", 2388, 1668, 120 },
     { "iPad14,3",  L"iPad Pro 11\" 4th gen M2 (2022)", 2388, 1668, 120 },
     { "iPad14,4",  L"iPad Pro 11\" 4th gen M2 (2022)", 2388, 1668, 120 },
-    { "iPad16,3",  L"iPad Pro 11\" M4 (2024)",         2420, 1668, 120 },
-    { "iPad16,4",  L"iPad Pro 11\" M4 (2024)",         2420, 1668, 120 },
+    { "iPad7,3",   L"iPad Pro 10.5\" (2017)",          2224, 1668, 120 },
+    { "iPad7,4",   L"iPad Pro 10.5\" (2017)",          2224, 1668, 120 },
+    { "iPad6,3",   L"iPad Pro 9.7\" (2016)",           2048, 1536,  60 },
+    { "iPad6,4",   L"iPad Pro 9.7\" (2016)",           2048, 1536,  60 },
+
     // iPad Air
+    { "iPad16,8",  L"iPad Air 11\" M4 (2026)",         2360, 1640,  60 },
+    { "iPad16,9",  L"iPad Air 11\" M4 (2026)",         2360, 1640,  60 },
+    { "iPad16,10", L"iPad Air 13\" M4 (2026)",         2732, 2048,  60 },
+    { "iPad16,11", L"iPad Air 13\" M4 (2026)",         2732, 2048,  60 },
+    { "iPad15,3",  L"iPad Air 11\" M3 (2025)",         2360, 1640,  60 },
+    { "iPad15,4",  L"iPad Air 11\" M3 (2025)",         2360, 1640,  60 },
+    { "iPad15,5",  L"iPad Air 13\" M3 (2025)",         2732, 2048,  60 },
+    { "iPad15,6",  L"iPad Air 13\" M3 (2025)",         2732, 2048,  60 },
     { "iPad13,1",  L"iPad Air 4th gen (2020)",         2360, 1640,  60 },
     { "iPad13,2",  L"iPad Air 4th gen (2020)",         2360, 1640,  60 },
     { "iPad13,16", L"iPad Air 5th gen M1 (2022)",      2360, 1640,  60 },
@@ -134,6 +158,14 @@ static const iPadDef g_ipadDefs[] = {
     { "iPad14,9",  L"iPad Air 11\" M2 (2024)",         2360, 1640,  60 },
     { "iPad14,10", L"iPad Air 13\" M2 (2024)",         2732, 2048,  60 },
     { "iPad14,11", L"iPad Air 13\" M2 (2024)",         2732, 2048,  60 },
+    { "iPad11,3",  L"iPad Air 3rd gen (2019)",         2224, 1668,  60 },
+    { "iPad11,4",  L"iPad Air 3rd gen (2019)",         2224, 1668,  60 },
+    { "iPad5,3",   L"iPad Air 2 (2014)",               2048, 1536,  60 },
+    { "iPad5,4",   L"iPad Air 2 (2014)",               2048, 1536,  60 },
+    { "iPad4,1",   L"iPad Air (2013)",                 2048, 1536,  60 },
+    { "iPad4,2",   L"iPad Air (2013)",                 2048, 1536,  60 },
+    { "iPad4,3",   L"iPad Air (2013)",                 2048, 1536,  60 },
+
     // iPad mini
     { "iPad11,1",  L"iPad mini 5th gen (2019)",        2048, 1536,  60 },
     { "iPad11,2",  L"iPad mini 5th gen (2019)",        2048, 1536,  60 },
@@ -141,19 +173,60 @@ static const iPadDef g_ipadDefs[] = {
     { "iPad14,2",  L"iPad mini 6th gen (2021)",        2266, 1488,  60 },
     { "iPad16,1",  L"iPad mini 7th gen (2024)",        2266, 1488,  60 },
     { "iPad16,2",  L"iPad mini 7th gen (2024)",        2266, 1488,  60 },
+    { "iPad5,1",   L"iPad mini 4 (2015)",              2048, 1536,  60 },
+    { "iPad5,2",   L"iPad mini 4 (2015)",              2048, 1536,  60 },
+    { "iPad4,7",   L"iPad mini 3 (2014)",              2048, 1536,  60 },
+    { "iPad4,8",   L"iPad mini 3 (2014)",              2048, 1536,  60 },
+    { "iPad4,9",   L"iPad mini 3 (2014)",              2048, 1536,  60 },
+    { "iPad4,4",   L"iPad mini 2 (2013)",              2048, 1536,  60 },
+    { "iPad4,5",   L"iPad mini 2 (2013)",              2048, 1536,  60 },
+    { "iPad4,6",   L"iPad mini 2 (2013)",              2048, 1536,  60 },
+    { "iPad2,5",   L"iPad mini (2012)",                1024,  768,  60 },
+    { "iPad2,6",   L"iPad mini (2012)",                1024,  768,  60 },
+    { "iPad2,7",   L"iPad mini (2012)",                1024,  768,  60 },
+
     // iPad (standard)
+    { "iPad15,7",  L"iPad (A16, 2025)",                2360, 1640,  60 },
+    { "iPad15,8",  L"iPad (A16, 2025)",                2360, 1640,  60 },
     { "iPad11,6",  L"iPad 8th gen (2020)",             2160, 1620,  60 },
     { "iPad11,7",  L"iPad 8th gen (2020)",             2160, 1620,  60 },
     { "iPad12,1",  L"iPad 9th gen (2021)",             2160, 1620,  60 },
     { "iPad12,2",  L"iPad 9th gen (2021)",             2160, 1620,  60 },
     { "iPad13,18", L"iPad 10th gen (2022)",            2360, 1640,  60 },
     { "iPad13,19", L"iPad 10th gen (2022)",            2360, 1640,  60 },
+    { "iPad7,11",  L"iPad 7th gen (2019)",             2160, 1620,  60 },
+    { "iPad7,12",  L"iPad 7th gen (2019)",             2160, 1620,  60 },
+    { "iPad7,5",   L"iPad 6th gen (2018)",             2048, 1536,  60 },
+    { "iPad7,6",   L"iPad 6th gen (2018)",             2048, 1536,  60 },
+    { "iPad6,11",  L"iPad 5th gen (2017)",             2048, 1536,  60 },
+    { "iPad6,12",  L"iPad 5th gen (2017)",             2048, 1536,  60 },
+    { "iPad3,4",   L"iPad 4th gen (2012)",             2048, 1536,  60 },
+    { "iPad3,5",   L"iPad 4th gen (2012)",             2048, 1536,  60 },
+    { "iPad3,6",   L"iPad 4th gen (2012)",             2048, 1536,  60 },
+    { "iPad3,1",   L"iPad 3rd gen (2012)",             2048, 1536,  60 },
+    { "iPad3,2",   L"iPad 3rd gen (2012)",             2048, 1536,  60 },
+    { "iPad3,3",   L"iPad 3rd gen (2012)",             2048, 1536,  60 },
+    { "iPad2,1",   L"iPad 2 (2011)",                   1024,  768,  60 },
+    { "iPad2,2",   L"iPad 2 (2011)",                   1024,  768,  60 },
+    { "iPad2,3",   L"iPad 2 (2011)",                   1024,  768,  60 },
+    { "iPad2,4",   L"iPad 2 (2011)",                   1024,  768,  60 },
+    { "iPad1,1",   L"iPad (2010)",                     1024,  768,  60 },
 };
 static const int IPAD_DEF_COUNT = (int)(sizeof(g_ipadDefs) / sizeof(g_ipadDefs[0]));
 
 struct ModeOption { int w, h, fps; };
 static ModeOption g_modes[4];
 static int        g_modeCount = 0;
+
+static void AddModeOption(int w, int h, int fps) {
+    if (w <= 0 || h <= 0 || fps <= 0) return;
+    for (int i = 0; i < g_modeCount; i++) {
+        if (g_modes[i].w == w && g_modes[i].h == h && g_modes[i].fps == fps)
+            return;
+    }
+    if (g_modeCount < (int)(sizeof(g_modes) / sizeof(g_modes[0])))
+        g_modes[g_modeCount++] = { w, h, fps };
+}
 
 // ── Globals ──────────────────────────────────────────────────────────
 static HWND              g_hwnd = nullptr;
@@ -2336,15 +2409,25 @@ static void DetectThread() {
             const iPadDef& d = g_ipadDefs[i];
             g_detectedName = d.displayName;
             g_detectFound = true;
-            g_modes[g_modeCount++] = { d.w, d.h, d.maxFPS };
+            AddModeOption(d.w, d.h, d.maxFPS);
             if (d.maxFPS > 60)
-                g_modes[g_modeCount++] = { d.w, d.h, 60 };
+                AddModeOption(d.w, d.h, 60);
             break;
         }
     }
 
     if (!g_detectFound) {
-        if (!pt.empty()) {
+        if (pt.rfind("iPad", 0) == 0) {
+            g_detectedName = L"Unknown iPad (";
+            for (char c : pt) g_detectedName += (wchar_t)c;
+            g_detectedName += L")";
+            g_detectFound = true;
+            AddModeOption(2360, 1640, 60);
+            AddModeOption(2048, 1536, 60);
+            AddModeOption(1920, 1080, 60);
+            AddModeOption(1024, 768, 60);
+        }
+        else if (!pt.empty()) {
             g_detectedName = L"Unknown (";
             for (char c : pt) g_detectedName += (wchar_t)c;
             g_detectedName += L")";
@@ -2352,7 +2435,8 @@ static void DetectThread() {
         else {
             g_detectedName = L"No device found";
         }
-        DisconnectVirtualDisplay();
+        if (!g_detectFound)
+            DisconnectVirtualDisplay();
     }
 
     g_detecting = false;

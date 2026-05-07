@@ -16,7 +16,7 @@ $env:NVENC_INCLUDE_DIR = "C:\Path\To\Video_Codec_SDK\Interface"
 
 ## libimobiledevice / iproxy
 
-The app uses `iproxy.exe` and libimobiledevice DLLs to forward a local Windows TCP port to the iPad over USB.
+The app uses the third-party `iproxy.exe` tool and libimobiledevice DLLs to forward a local Windows TCP port to the iPad over USB.
 
 The current app resource file expects these files under `x64/Release/` at build time:
 
@@ -48,7 +48,7 @@ zip.dll
 zlib1.dll
 ```
 
-Do not commit these binaries unless you intentionally vendor them and include all required license notices.
+Do not commit these binaries unless you intentionally vendor them and include all required license notices. If a release zip or installer includes them, ship the upstream license text and a third-party notice alongside the build.
 
 ## Microsoft IDD Sample Code
 

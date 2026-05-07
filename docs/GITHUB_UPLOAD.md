@@ -1,9 +1,9 @@
 # GitHub Upload Guide
 
-This workspace currently appears inside a broader git root on the local machine. Before pushing, make sure the GitHub repository root is this folder:
+Before pushing, make sure the GitHub repository root is the project folder:
 
 ```text
-C:\Users\Veysel\source\repos\DuetCloneNew
+C:\Path\To\WinSideUSB
 ```
 
 Do not run a first commit from:
@@ -19,16 +19,16 @@ or git may try to include unrelated user files.
 From PowerShell:
 
 ```powershell
-cd C:\Users\Veysel\source\repos\DuetCloneNew
+cd C:\Path\To\WinSideUSB
 
 # Only do this if this folder is not already its own repo.
 git init
 
-# This must print C:/Users/Veysel/source/repos/DuetCloneNew.
+# This must print the project folder, not a parent user folder.
 git rev-parse --show-toplevel
 
-git add .gitignore .gitattributes README.md AGENTS.md CLAUDE.md docs scripts `
-  WinSideUSB.sln IddSampleDriver.sln DuetCloneNew IddSampleDriver
+git add .gitignore .gitattributes README.md docs scripts `
+  WinSideUSB.sln IddSampleDriver.sln WinSideUSB IddSampleDriver
 
 git status --short
 ```
@@ -44,8 +44,8 @@ x64/
 *.cat
 *.cer
 *.csv
-DuetCloneNew/output_test.mp4
-DuetCloneNew/DuetCloneNew_New.cpp
+output_test.mp4
+*_New.cpp
 ```
 
 Then:
@@ -62,8 +62,8 @@ git push -u origin main
 If using GitHub Desktop:
 
 1. Choose `Add existing repository`.
-2. Select exactly `C:\Users\Veysel\source\repos\DuetCloneNew`.
-3. Confirm the changed files list does not include `C:\Users\Veysel` files.
+2. Select exactly the project folder.
+3. Confirm the changed files list does not include unrelated user files.
 4. Create the repository as private first.
 
 ## Public Repo Warning

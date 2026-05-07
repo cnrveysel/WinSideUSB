@@ -470,9 +470,9 @@ void IndirectDeviceContext::InitAdapter()
     AdapterCaps.EndPointDiagnostics.GammaSupport = IDDCX_FEATURE_IMPLEMENTATION_NONE;
     AdapterCaps.EndPointDiagnostics.TransmissionType = IDDCX_TRANSMISSION_TYPE_WIRED_OTHER;
 
-    AdapterCaps.EndPointDiagnostics.pEndPointFriendlyName = L"iPad Pro Display";
+    AdapterCaps.EndPointDiagnostics.pEndPointFriendlyName = L"WinSideUSB Virtual Display";
     AdapterCaps.EndPointDiagnostics.pEndPointManufacturerName = L"WinSideUSB";
-    AdapterCaps.EndPointDiagnostics.pEndPointModelName = L"iPad Pro 12.9";
+    AdapterCaps.EndPointDiagnostics.pEndPointModelName = L"USB iPad Display";
 
     IDDCX_ENDPOINT_VERSION Version = {};
     Version.Size = sizeof(Version);
@@ -862,16 +862,55 @@ NTSTATUS IddSampleMonitorQueryModes(IDDCX_MONITOR MonitorObject, const IDARG_IN_
 
     vector<IDDCX_TARGET_MODE> TargetModes;
 
-    // iPad Pro 12.9" native resolution + common fallbacks
-    TargetModes.push_back(CreateIddCxTargetMode(2732, 2048, 120));  // iPad Pro native
-    TargetModes.push_back(CreateIddCxTargetMode(2732, 2048, 60));
-    TargetModes.push_back(CreateIddCxTargetMode(2048, 1536, 120));  // Scaled
-    TargetModes.push_back(CreateIddCxTargetMode(2048, 1536, 60));
-    TargetModes.push_back(CreateIddCxTargetMode(1920, 1080, 120));  // 1080p fallback
-    TargetModes.push_back(CreateIddCxTargetMode(1920, 1080, 60));
-    TargetModes.push_back(CreateIddCxTargetMode(1366, 1024, 120));  // Half iPad
-    TargetModes.push_back(CreateIddCxTargetMode(1366, 1024, 60));
-    TargetModes.push_back(CreateIddCxTargetMode(1024, 768, 60));  // Basic
+    auto AddTargetMode = [&](DWORD Width, DWORD Height, DWORD VSync)
+    {
+        if (Width == 0 || Height == 0 || VSync == 0)
+        {
+            return;
+        }
+
+        for (const auto& Existing : TargetModes)
+        {
+            const auto& Signal = Existing.TargetVideoSignalInfo.targetVideoSignalInfo;
+            if (Signal.activeSize.cx == Width &&
+                Signal.activeSize.cy == Height &&
+                Signal.vSyncFreq.Numerator == VSync &&
+                Signal.vSyncFreq.Denominator == 1)
+            {
+                return;
+            }
+        }
+
+        TargetModes.push_back(CreateIddCxTargetMode(Width, Height, VSync));
+    };
+
+    // The app writes s_Desired* before connecting the monitor, so expose that
+    // exact iPad mode first. The rest are common iPad/native fallbacks.
+    AddTargetMode(s_DesiredWidth, s_DesiredHeight, s_DesiredFPS);
+    if (s_DesiredFPS > 60)
+    {
+        AddTargetMode(s_DesiredWidth, s_DesiredHeight, 60);
+    }
+
+    AddTargetMode(2752, 2064, 120); // iPad Pro 13"
+    AddTargetMode(2752, 2064, 60);
+    AddTargetMode(2732, 2048, 120); // iPad Pro 12.9" / iPad Air 13"
+    AddTargetMode(2732, 2048, 60);
+    AddTargetMode(2420, 1668, 120); // iPad Pro 11" M4/M5
+    AddTargetMode(2420, 1668, 60);
+    AddTargetMode(2388, 1668, 120); // iPad Pro 11" 2018-2022
+    AddTargetMode(2388, 1668, 60);
+    AddTargetMode(2360, 1640, 60);  // iPad Air 11" / iPad 10th/A16
+    AddTargetMode(2266, 1488, 60);  // iPad mini 6/A17 Pro
+    AddTargetMode(2224, 1668, 120); // iPad Pro 10.5"
+    AddTargetMode(2224, 1668, 60);  // iPad Air 3
+    AddTargetMode(2160, 1620, 60);  // iPad 7th-9th gen
+    AddTargetMode(2048, 1536, 60);  // 9.7" Retina iPads
+    AddTargetMode(1920, 1080, 120);
+    AddTargetMode(1920, 1080, 60);
+    AddTargetMode(1366, 1024, 120);
+    AddTargetMode(1366, 1024, 60);
+    AddTargetMode(1024, 768, 60);   // original iPad / iPad 2 / iPad mini
 
     pOutArgs->TargetModeBufferOutputCount = (UINT)TargetModes.size();
 
