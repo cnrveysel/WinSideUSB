@@ -1,0 +1,58 @@
+# Visual Studio / MSBuild
+.vs/
+.vscode/
+*.user
+*.suo
+*.VC.db
+*.VC.VC.opendb
+*.opensdf
+*.sdf
+ipch/
+
+# Build output
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+*.obj
+*.pch
+*.pdb
+*.idb
+*.ilk
+*.iobj
+*.ipdb
+*.tlog
+*.lastbuildstate
+*.log
+
+# Native binaries and packages
+*.exe
+*.dll
+*.lib
+*.exp
+*.msi
+*.zip
+*.7z
+
+# Driver signing / package artifacts
+*.cat
+*.cer
+*.pfx
+*.pvk
+*.spc
+
+# Local diagnostics and captures
+*.csv
+*.etl
+*.evtx
+*.dmp
+*.mdmp
+*.hdmp
+DuetCloneNew/output_test.mp4
+DuetCloneNew/DuetCloneNew_New.cpp
+
+# Local assistant/editor state
+.claude/
+.codex/
