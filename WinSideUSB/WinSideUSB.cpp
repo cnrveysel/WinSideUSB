@@ -242,6 +242,7 @@ static std::atomic<bool> g_detecting{ false };
 static std::atomic<bool> g_virtualDisplayAttached{ false };
 
 static constexpr int COLOR_TEST_GOP_SECONDS = 5;
+static constexpr int IDLE_HEARTBEAT_FPS = 4;
 
 static const GUID MY_KFS = { 0x392d4a7b,0xca19,0x4873,{0x87,0x5f,0x99,0xa9,0x02,0x60,0x45,0x02} };
 static const GUID MY_LL = { 0x9c57023c,0x7709,0x470d,{0x9d,0x52,0x1d,0x99,0x61,0x69,0x22,0x29} };
@@ -2037,6 +2038,9 @@ static void StreamThread() {
         LARGE_INTEGER panicUntilQPC{};
         LARGE_INTEGER lastForcedKeyframeQPC = startQPC;
         lastForcedKeyframeQPC.QuadPart -= qpfFreq.QuadPart;
+        LARGE_INTEGER lastIdleHeartbeatQPC = startQPC;
+        const LONGLONG idleHeartbeatIntervalCounts = qpfFreq.QuadPart / IDLE_HEARTBEAT_FPS;
+        bool haveLastNativeFrame = false;
         bool previousFrameLargeDirty = false;
         auto advanceNextFrame = [&](const LARGE_INTEGER& now) {
             if (now.QuadPart - nextFrameQPC.QuadPart > activeFrameIntervalCounts * 2) {
@@ -2135,6 +2139,29 @@ static void StreamThread() {
                 streamLog.captureTimeouts++;
                 QueryPerformanceCounter(&nowQPC);
                 advanceNextFrame(nowQPC);
+                if (nativeEncoder && configSent && haveLastNativeFrame &&
+                    nowQPC.QuadPart - lastIdleHeartbeatQPC.QuadPart >= idleHeartbeatIntervalCounts) {
+                    bool forceHeartbeatKeyframe = packetSender.ConsumeKeyframeRequest();
+                    std::vector<uint8_t> encoded;
+                    if (nativeEnc.Encode(forceHeartbeatKeyframe, encoded)) {
+                        streamLog.inputFrames++;
+                        streamLog.totalInputFrames++;
+                        if (forceHeartbeatKeyframe) {
+                            lastForcedKeyframeQPC = nowQPC;
+                            streamLog.forcedKeyframes++;
+                        }
+                        if (!encoded.empty()) {
+                            bool queued = false;
+                            if (!packetSender.Enqueue(encoded.data(), (DWORD)encoded.size(), queued))
+                                break;
+                            if (queued) frameCount++;
+                        }
+                    }
+                    else {
+                        streamLog.inputFailures++;
+                    }
+                    lastIdleHeartbeatQPC = nowQPC;
+                }
                 flushLog();
                 continue;
             }
@@ -2211,8 +2238,10 @@ static void StreamThread() {
 
             if (nativeEncoder || useGPUInput) {
                 ctx->CopyResource(gpuTex, tex);
-                if (nativeEncoder)
+                if (nativeEncoder) {
                     waitForGpuCopy();
+                    haveLastNativeFrame = true;
+                }
             }
             else {
                 ctx->CopyResource(sTex, tex);
@@ -2283,7 +2312,10 @@ static void StreamThread() {
                         bool queued = false;
                         if (!packetSender.Enqueue(encoded.data(), (DWORD)encoded.size(), queued))
                             break;
-                        if (queued) frameCount++;
+                        if (queued) {
+                            frameCount++;
+                            lastIdleHeartbeatQPC = nowQPC;
+                        }
                     }
                 }
                 else {
