@@ -241,6 +241,8 @@ static std::atomic<int>  g_targetFPS{ 120 };
 static std::atomic<bool> g_detecting{ false };
 static std::atomic<bool> g_virtualDisplayAttached{ false };
 
+static constexpr int COLOR_TEST_GOP_SECONDS = 5;
+
 static const GUID MY_KFS = { 0x392d4a7b,0xca19,0x4873,{0x87,0x5f,0x99,0xa9,0x02,0x60,0x45,0x02} };
 static const GUID MY_LL = { 0x9c57023c,0x7709,0x470d,{0x9d,0x52,0x1d,0x99,0x61,0x69,0x22,0x29} };
 
@@ -250,6 +252,14 @@ static void SetCodecUI4(ICodecAPI* codec, const GUID& key, ULONG value) {
     VARIANT v; VariantInit(&v); v.vt = VT_UI4; v.ulVal = value;
     codec->SetValue(&key, &v);
     VariantClear(&v);
+}
+
+static void ApplyDesktopColorMetadata(IMFMediaType* mt) {
+    if (!mt) return;
+    mt->SetUINT32(MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT709);
+    mt->SetUINT32(MF_MT_TRANSFER_FUNCTION, MFVideoTransFunc_709);
+    mt->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709);
+    mt->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255);
 }
 
 static void ConfigureLowLatencyEncoder(IMFTransform* enc, UINT32 avgBitrate, UINT32 maxBitrate, int fps) {
@@ -263,7 +273,7 @@ static void ConfigureLowLatencyEncoder(IMFTransform* enc, UINT32 avgBitrate, UIN
     if (FAILED(enc->QueryInterface(__uuidof(ICodecAPI), (void**)&codec)) || !codec)
         return;
 
-    UINT32 keyFrames = (UINT32)fps;
+    UINT32 keyFrames = (UINT32)(fps * COLOR_TEST_GOP_SECONDS);
     if (keyFrames < 15) keyFrames = 15;
 
     SetCodecUI4(codec, CODECAPI_AVLowLatencyMode, TRUE);
@@ -1437,7 +1447,8 @@ public:
             encConfig = preset.presetCfg;
         encConfig.version = NV_ENC_CONFIG_VER;
         encConfig.profileGUID = NV_ENC_H264_PROFILE_MAIN_GUID;
-        encConfig.gopLength = (uint32_t)fps;
+        const uint32_t gopFrames = (uint32_t)(fps * COLOR_TEST_GOP_SECONDS);
+        encConfig.gopLength = gopFrames;
         encConfig.frameIntervalP = 1;
         encConfig.frameFieldMode = NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME;
         encConfig.mvPrecision = NV_ENC_MV_PRECISION_QUARTER_PEL;
@@ -1461,7 +1472,7 @@ public:
 
         NV_ENC_CONFIG_H264& h264 = encConfig.encodeCodecConfig.h264Config;
         h264.level = NV_ENC_LEVEL_AUTOSELECT;
-        h264.idrPeriod = (uint32_t)fps;
+        h264.idrPeriod = gopFrames;
         h264.repeatSPSPPS = 1;
         h264.outputAUD = 1;
         h264.chromaFormatIDC = 1;
@@ -1469,6 +1480,13 @@ public:
         h264.numRefL0 = NV_ENC_NUM_REF_FRAMES_1;
         h264.numRefL1 = NV_ENC_NUM_REF_FRAMES_AUTOSELECT;
         h264.entropyCodingMode = NV_ENC_H264_ENTROPY_CODING_MODE_CABAC;
+        h264.h264VUIParameters.videoSignalTypePresentFlag = 1;
+        h264.h264VUIParameters.videoFormat = NV_ENC_VUI_VIDEO_FORMAT_UNSPECIFIED;
+        h264.h264VUIParameters.videoFullRangeFlag = 1;
+        h264.h264VUIParameters.colourDescriptionPresentFlag = 1;
+        h264.h264VUIParameters.colourPrimaries = NV_ENC_VUI_COLOR_PRIMARIES_BT709;
+        h264.h264VUIParameters.transferCharacteristics = NV_ENC_VUI_TRANSFER_CHARACTERISTIC_BT709;
+        h264.h264VUIParameters.colourMatrix = NV_ENC_VUI_MATRIX_COEFFS_BT709;
 
         NV_ENC_INITIALIZE_PARAMS init{};
         init.version = NV_ENC_INITIALIZE_PARAMS_VER;
@@ -1911,6 +1929,7 @@ static void StreamThread() {
                     ot->SetUINT32(MF_MT_AVG_BITRATE, HW_AVG_BITRATE);
                     MFSetAttributeSize(ot, MF_MT_FRAME_SIZE, W, H);
                     MFSetAttributeRatio(ot, MF_MT_FRAME_RATE, FPS, 1);
+                    ApplyDesktopColorMetadata(ot);
                     ot->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
                     ot->SetUINT32(MF_MT_MPEG2_PROFILE, 77);
                     hr = hw->SetOutputType(0, ot, 0); ot->Release();
@@ -1935,6 +1954,7 @@ static void StreamThread() {
                             if (av) {
                                 MFSetAttributeSize(av, MF_MT_FRAME_SIZE, W, H);
                                 MFSetAttributeRatio(av, MF_MT_FRAME_RATE, FPS, 1);
+                                ApplyDesktopColorMetadata(av);
                                 av->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
                                 if (SUCCEEDED(hw->SetInputType(0, av, 0))) { inputOk = true; useGPUInput = true; }
                                 av->Release();
@@ -1945,6 +1965,7 @@ static void StreamThread() {
                             if (av) {
                                 MFSetAttributeSize(av, MF_MT_FRAME_SIZE, W, H);
                                 MFSetAttributeRatio(av, MF_MT_FRAME_RATE, FPS, 1);
+                                ApplyDesktopColorMetadata(av);
                                 av->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
                                 if (SUCCEEDED(hw->SetInputType(0, av, 0))) inputOk = true;
                                 av->Release();
@@ -1971,6 +1992,7 @@ static void StreamThread() {
         ot->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video); ot->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
         ot->SetUINT32(MF_MT_AVG_BITRATE, SW_AVG_BITRATE);
         MFSetAttributeSize(ot, MF_MT_FRAME_SIZE, W, H); MFSetAttributeRatio(ot, MF_MT_FRAME_RATE, FPS, 1);
+        ApplyDesktopColorMetadata(ot);
         ot->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
         ot->SetUINT32(MF_MT_MPEG2_PROFILE, 66);
         enc->SetOutputType(0, ot, 0); ot->Release();
@@ -1980,11 +2002,12 @@ static void StreamThread() {
         IMFMediaType* it = nullptr; MFCreateMediaType(&it);
         it->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video); it->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
         MFSetAttributeSize(it, MF_MT_FRAME_SIZE, W, H); MFSetAttributeRatio(it, MF_MT_FRAME_RATE, FPS, 1);
+        ApplyDesktopColorMetadata(it);
         it->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
         enc->SetInputType(0, it, 0); it->Release();
     }
 
-    encoderName = nativeEncoder ? "native_nvenc" : (hwEncoder ? (useGPUInput ? "nvenc_gpu" : "nvenc_cpu_convert") : "software");
+    encoderName = nativeEncoder ? "native_nvenc_bt709_full_gop5" : (hwEncoder ? (useGPUInput ? "nvenc_gpu_bt709_full_gop5" : "nvenc_cpu_convert_bt709_full_gop5") : "software_bt709_full_gop5");
     if (hwEncoder && useGPUInput) PostStatus(SS_ENCODER_GPU);
     else if (hwEncoder)                PostStatus(SS_ENCODER_HW);
     else                               PostStatus(SS_ENCODER_SW);
@@ -2237,7 +2260,7 @@ static void StreamThread() {
             }
 
             bool periodicNativeKeyframe =
-                nativeEncoder && (nowQPC.QuadPart - lastForcedKeyframeQPC.QuadPart > qpfFreq.QuadPart * 2);
+                nativeEncoder && (nowQPC.QuadPart - lastForcedKeyframeQPC.QuadPart > qpfFreq.QuadPart * COLOR_TEST_GOP_SECONDS);
             bool forceIFrame = periodicNativeKeyframe ||
                 (largeDirtyFrame && !previousFrameLargeDirty) ||
                 packetSender.ConsumeKeyframeRequest();
