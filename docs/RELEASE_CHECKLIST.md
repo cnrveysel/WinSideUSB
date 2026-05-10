@@ -7,6 +7,7 @@
 - Keep generated build output out of git.
 - Keep test certificates and private keys out of git.
 - Keep third-party binaries out of git unless license notices are included.
+- If a release bundles `iproxy.exe`, include GPL-2.0 notices and upstream source/access information.
 - Keep NVIDIA SDK headers out of git.
 - Make sure `README.md` still matches the current handshake, ports, and driver install flow.
 - Make sure `docs/DRIVER.md` documents the current driver recovery steps.
@@ -62,6 +63,7 @@ For a downloadable development build:
 - driver package only if users are expected to install a development test driver
 - clear warning that test-signed driver install requires test-signing setup
 - third-party notices
+- GPL-2.0 notice/source-access information if `iproxy.exe` is bundled
 
 For a normal public release, do not ship the driver until it is properly signed for distribution.
 

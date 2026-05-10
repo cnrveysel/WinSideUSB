@@ -2,7 +2,7 @@
 
 WinSideUSB is an open-source, experimental Windows-to-iPad USB display streamer.
 
-It creates a Windows virtual display with an Indirect Display Driver (IDD), captures that display on the GPU, encodes the frames with NVENC, and sends H.264 video to an iPad over a USB-tunneled TCP connection.
+It creates a Windows virtual display with an Indirect Display Driver (IDD), captures that display on the GPU, encodes the frames with a low-latency H.264 path, and sends video to an iPad over a USB-tunneled TCP connection.
 
 The primary tested target is an iPad Pro 12.9-inch M2-class display at `2732x2048` and up to `120 Hz`.
 
@@ -10,7 +10,7 @@ The primary tested target is an iPad Pro 12.9-inch M2-class display at `2732x204
 
 This is a personal research project. It is not production-ready commercial display software yet.
 
-The fast path is working well on the test machine with an NVIDIA RTX 3080 Ti Laptop GPU, but the driver is still development-signed and must be installed manually. Public distribution would require proper Microsoft driver signing.
+The fastest path is designed for NVIDIA GPUs with NVENC, but the app also has Windows Media Foundation hardware/software fallback paths for non-NVIDIA systems. The driver is still development-signed and must be installed manually. Public distribution would require proper Microsoft driver signing.
 
 This project is not affiliated with Apple or any commercial display product. iPad is a trademark of Apple Inc.
 
@@ -21,7 +21,8 @@ Development note: WinSideUSB was built by Veysel as a personal engineering proje
 - USB-only iPad transport through the libimobiledevice/usbmux toolchain.
 - On-demand Windows virtual display through a custom IDD driver.
 - GPU capture with D3D11 Desktop Duplication.
-- Native NVENC H.264 encode path.
+- Native NVENC H.264 encode path for NVIDIA GPUs.
+- Media Foundation hardware/software H.264 fallback path for other systems.
 - Low-latency sender with latest-frame-wins behavior.
 - iPad Swift client source for Swift Playgrounds or a native iOS app target.
 - Product-type based iPad mode presets for Pro, Air, mini, and standard iPad models.
@@ -56,8 +57,8 @@ docs/                          Driver, iPad, troubleshooting, and release notes
 - Visual Studio 2022 with Desktop development with C++.
 - Windows SDK.
 - Windows Driver Kit (WDK), required for building the IDD driver.
-- NVIDIA GPU and driver for the native NVENC path.
-- NVIDIA Video Codec SDK header `nvEncodeAPI.h`.
+- NVIDIA GPU and driver for the native NVENC path. AMD and Intel systems may use the Media Foundation fallback path, but that path is less tested and may have higher latency or lower smoothness.
+- NVIDIA Video Codec SDK header `nvEncodeAPI.h` for building the native NVENC path.
 - Test-signing enabled for the development driver.
 
 ### iPad
@@ -69,6 +70,8 @@ docs/                          Driver, iPad, troubleshooting, and release notes
 ### USB tools
 
 The Windows app can embed `iproxy.exe`, `ideviceinfo.exe`, and required libimobiledevice DLLs as resources. These binaries are third-party runtime files and are not committed to the repository by default.
+
+`iproxy` comes from the libimobiledevice/libusbmuxd project. If you distribute builds that include `iproxy.exe` or libimobiledevice DLLs, include the upstream license texts and attribution notices. See [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
 
 Before building the app from a fresh checkout, place the required libimobiledevice runtime files in:
 

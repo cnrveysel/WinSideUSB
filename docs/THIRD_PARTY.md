@@ -20,6 +20,20 @@ $env:NVENC_INCLUDE_DIR = "C:\Path\To\Video_Codec_SDK\Interface"
 
 The app uses the third-party `iproxy.exe` tool and libimobiledevice DLLs to forward a local Windows TCP port to the iPad over USB.
 
+Attribution:
+
+- libimobiledevice project: <https://libimobiledevice.org/>
+- libimobiledevice repository: <https://github.com/libimobiledevice/libimobiledevice>
+- libusbmuxd repository, which provides `iproxy`: <https://github.com/libimobiledevice/libusbmuxd>
+
+License notes:
+
+- libimobiledevice is LGPL-2.1.
+- libusbmuxd is LGPL-2.1.
+- `iproxy` is GPL-2.0.
+
+If a Windows release embeds or bundles `iproxy.exe`, treat that release as GPL-runtime packaging work: include the GPL-2.0 text, preserve notices, and provide the corresponding upstream source/access required by the license. If this is not desirable, keep the public repository source-only and require users to provide the tools locally.
+
 The current app resource file expects these files under `x64/Release/` at build time:
 
 ```text
@@ -50,7 +64,7 @@ zip.dll
 zlib1.dll
 ```
 
-Do not commit these binaries unless you intentionally vendor them and include all required license notices. If a release zip or installer includes them, ship the upstream license text and a third-party notice alongside the build.
+Do not commit these binaries unless you intentionally vendor them and include all required license notices. If a release zip or installer includes them, ship the upstream license texts and a third-party notice alongside the build.
 
 ## Microsoft IDD Sample Code
 
