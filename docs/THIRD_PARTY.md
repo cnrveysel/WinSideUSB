@@ -4,6 +4,8 @@ WinSideUSB depends on several third-party components at build or runtime.
 
 This document is a packaging reminder, not a complete license inventory.
 
+Original WinSideUSB project code is MIT licensed, but third-party components keep their own licenses.
+
 ## NVIDIA Video Codec SDK
 
 The Windows app includes `nvEncodeAPI.h` from the NVIDIA Video Codec SDK.
@@ -53,6 +55,8 @@ Do not commit these binaries unless you intentionally vendor them and include al
 ## Microsoft IDD Sample Code
 
 The virtual display driver is based on the Microsoft Indirect Display Driver sample structure. Keep its original copyright notices.
+
+The Microsoft Windows Driver Samples repository is licensed under the Microsoft Public License (MS-PL). A copy is included at `licenses/Microsoft-Public-License.txt`.
 
 ## Release Packaging
 

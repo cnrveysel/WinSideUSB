@@ -1,6 +1,6 @@
 # WinSideUSB
 
-WinSideUSB is an experimental Windows-to-iPad USB display streamer.
+WinSideUSB is an open-source, experimental Windows-to-iPad USB display streamer.
 
 It creates a Windows virtual display with an Indirect Display Driver (IDD), captures that display on the GPU, encodes the frames with NVENC, and sends H.264 video to an iPad over a USB-tunneled TCP connection.
 
@@ -11,6 +11,8 @@ The primary tested target is an iPad Pro 12.9-inch M2-class display at `2732x204
 This is a personal research project. It is not production-ready commercial display software yet.
 
 The fast path is working well on the test machine with an NVIDIA RTX 3080 Ti Laptop GPU, but the driver is still development-signed and must be installed manually. Public distribution would require proper Microsoft driver signing.
+
+This project is not affiliated with Apple or any commercial display product. iPad is a trademark of Apple Inc.
 
 Development note: WinSideUSB was built by Veysel as a personal engineering project with ChatGPT used as an AI pair-programming and research assistant for debugging, profiling, documentation, and iterative implementation work.
 
@@ -162,6 +164,8 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common failures.
 - [Third-party runtime notes](docs/THIRD_PARTY.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [GitHub upload guide](docs/GITHUB_UPLOAD.md)
+- [Security notes](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## GitHub Notes
 
@@ -177,4 +181,6 @@ Use GitHub Releases for packaged builds. Include third-party notices for libimob
 
 ## License
 
-No public license has been selected yet. Treat this repository as private/internal unless a license is added.
+Original WinSideUSB project code is released under the [MIT License](LICENSE).
+
+Microsoft IDD sample-derived driver code keeps Microsoft copyright notices and MS-PL terms. Third-party tools, SDK headers, Windows driver samples, and runtime binaries keep their own licenses. See [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).

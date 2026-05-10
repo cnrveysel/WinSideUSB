@@ -3,7 +3,7 @@
 ## Before The First Push
 
 - Decide whether the repository is private or public.
-- If public, choose a real license first.
+- If public, keep `LICENSE`, `SECURITY.md`, and third-party notices up to date.
 - Keep generated build output out of git.
 - Keep test certificates and private keys out of git.
 - Keep third-party binaries out of git unless license notices are included.
@@ -20,6 +20,10 @@
 - `scripts/Install-DevDriver.ps1`
 - `.gitignore`
 - `.gitattributes`
+- `LICENSE`
+- `SECURITY.md`
+- `CONTRIBUTING.md`
+- `licenses/`
 
 ## Files To Avoid
 
@@ -60,3 +64,10 @@ For a downloadable development build:
 - third-party notices
 
 For a normal public release, do not ship the driver until it is properly signed for distribution.
+
+## Public Repository Notes
+
+- Make clear that the project is experimental.
+- Make clear that development driver installs may require test-signing mode.
+- Do not imply affiliation with Apple or any commercial display product.
+- Prefer source-only publishing until the driver signing and third-party runtime packaging story is settled.
