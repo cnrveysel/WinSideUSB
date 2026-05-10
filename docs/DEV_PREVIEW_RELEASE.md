@@ -42,7 +42,9 @@ Then reboot.
 
 ## Tester Quick Start
 
-1. Extract the zip.
+Download `WinSideUSB-*-dev-preview.zip` from GitHub Releases. Do not use GitHub's green **Code -> Download ZIP** button for installation; that download is source code only and does not include the built `.exe` or driver package.
+
+1. Extract the developer-preview zip.
 2. Double-click:
 
 ```text

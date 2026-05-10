@@ -130,6 +130,8 @@ For testers who explicitly want a downloadable build, maintainers can publish a 
 
 This is not a production installer. It still requires Administrator access, Windows test-signing setup, and the usual test-driver warnings.
 
+Do not use GitHub's green **Code -> Download ZIP** button as an installer. That archive is source code only, so it does not contain `x64/Release/WinSideUSB.exe` or the built driver package. Testers should download `WinSideUSB-*-dev-preview.zip` from the GitHub Releases page.
+
 After building the app and driver:
 
 ```powershell

@@ -49,8 +49,29 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 $sourceRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $sourceRelease = Join-Path $sourceRoot "x64\Release"
 $sourceDriver = Join-Path $sourceRelease "IddSampleDriver"
+$expectedExe = Join-Path $sourceRelease "WinSideUSB.exe"
 
-Require-File (Join-Path $sourceRelease "WinSideUSB.exe")
+if (-not (Test-Path $expectedExe -PathType Leaf)) {
+    throw @"
+This installer must be run from the packaged WinSideUSB developer-preview ZIP, not from GitHub's Code/Source ZIP.
+
+Missing:
+  $expectedExe
+
+If you downloaded "WinSideUSB-main.zip" from GitHub's green Code button, that is source code only and does not contain WinSideUSB.exe or the built driver package.
+
+Download the packaged build from:
+  https://github.com/cnrveysel/WinSideUSB/releases
+
+Look for:
+  WinSideUSB-*-dev-preview.zip
+
+If you are building from source, build the app and driver in Release x64 first, then create the installable ZIP with:
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Package-DevPreview.ps1 -Version "0.1.0"
+"@
+}
+
+Require-File $expectedExe
 Require-File (Join-Path $sourceRelease "IddSampleDriver.cer")
 Require-Dir $sourceDriver
 Require-File (Join-Path $sourceDriver "IddSampleDriver.inf")
