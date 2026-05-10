@@ -22,6 +22,7 @@
 - `.gitignore`
 - `.gitattributes`
 - `LICENSE`
+- `NOTICE.md`
 - `SECURITY.md`
 - `CONTRIBUTING.md`
 - `licenses/`

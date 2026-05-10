@@ -169,6 +169,7 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common failures.
 - [GitHub upload guide](docs/GITHUB_UPLOAD.md)
 - [Security notes](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
+- [Notices](NOTICE.md)
 
 ## GitHub Notes
 
@@ -186,4 +187,4 @@ Use GitHub Releases for packaged builds. Include third-party notices for libimob
 
 Original WinSideUSB project code is released under the [MIT License](LICENSE).
 
-Microsoft IDD sample-derived driver code keeps Microsoft copyright notices and MS-PL terms. Third-party tools, SDK headers, Windows driver samples, and runtime binaries keep their own licenses. See [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
+Microsoft IDD sample-derived driver code keeps Microsoft copyright notices and MS-PL terms. Third-party tools, SDK headers, Windows driver samples, and runtime binaries keep their own licenses. See [NOTICE.md](NOTICE.md) and [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).

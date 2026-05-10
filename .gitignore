@@ -25,6 +25,12 @@ x86/
 *.ipdb
 *.tlog
 *.lastbuildstate
+*.aps
+*.res
+*.manifest
+*.binlog
+*.cache
+*.db
 *.log
 
 # Native binaries and packages
@@ -39,9 +45,19 @@ x86/
 # Driver signing / package artifacts
 *.cat
 *.cer
+*.crt
 *.pfx
+*.p12
+*.pem
+*.key
 *.pvk
+*.p7b
 *.spc
+*.sst
+*.sys
+*.cab
+*.hlkx
+*.hckx
 
 # Local diagnostics and captures
 *.csv
@@ -56,3 +72,12 @@ x86/
 # Local assistant/editor state
 .claude/
 .codex/
+
+# OS / Swift local state
+.DS_Store
+Thumbs.db
+DerivedData/
+.build/
+.swiftpm/
+*.xcuserstate
+xcuserdata/

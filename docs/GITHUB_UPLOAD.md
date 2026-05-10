@@ -9,7 +9,7 @@ C:\Path\To\WinSideUSB
 Do not run a first commit from:
 
 ```text
-C:\Users\Veysel
+C:\Users\<name>
 ```
 
 or git may try to include unrelated user files.

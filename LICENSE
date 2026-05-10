@@ -1,15 +1,3 @@
-WinSideUSB Repository License
-
-Original WinSideUSB project code is released under the MIT License below.
-
-Some files in `IddSampleDriver/` are derived from Microsoft Windows Driver
-Samples and retain Microsoft copyright notices. Those sample-derived portions
-are governed by the Microsoft Public License (MS-PL); see
-`licenses/Microsoft-Public-License.txt`.
-
-Third-party SDK headers, runtime tools, and binaries are not relicensed by this
-repository.
-
 MIT License
 
 Copyright (c) 2026 Veysel
