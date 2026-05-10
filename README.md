@@ -124,6 +124,20 @@ pnputil /enum-devices /class Display /drivers
 
 See [docs/DRIVER.md](docs/DRIVER.md) for details.
 
+## Developer Preview Zip
+
+For testers who explicitly want a downloadable build, maintainers can publish a developer-preview zip with the app, test-signed driver package, iPad Swift client source, install helper, and license notices.
+
+This is not a production installer. It still requires Administrator access, Windows test-signing setup, and the usual test-driver warnings.
+
+After building the app and driver:
+
+```powershell
+.\scripts\Package-DevPreview.ps1 -Version "0.1.0-dev"
+```
+
+See [docs/DEV_PREVIEW_RELEASE.md](docs/DEV_PREVIEW_RELEASE.md).
+
 ## Run
 
 1. Build or install the IDD driver.
@@ -165,6 +179,7 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common failures.
 - [iPad client notes](docs/IPAD_CLIENT.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Third-party runtime notes](docs/THIRD_PARTY.md)
+- [Developer preview release notes](docs/DEV_PREVIEW_RELEASE.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [GitHub upload guide](docs/GITHUB_UPLOAD.md)
 - [Security notes](SECURITY.md)

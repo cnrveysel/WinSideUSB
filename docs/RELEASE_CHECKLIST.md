@@ -19,6 +19,7 @@
 - `README.md`
 - `docs/`
 - `scripts/Install-DevDriver.ps1`
+- `scripts/Package-DevPreview.ps1`
 - `.gitignore`
 - `.gitattributes`
 - `LICENSE`
@@ -58,13 +59,19 @@ Before making a release zip:
 
 For a downloadable development build:
 
-- `WinSideUSB.exe`
-- libimobiledevice runtime files if not embedded
+- `x64/Release/WinSideUSB.exe`
+- `x64/Release/IddSampleDriver/`
+- `x64/Release/IddSampleDriver.cer`
+- `scripts/Install-DevDriver.ps1`
+- `WinSideUSB/swiftclientcode.swift`
+- libimobiledevice runtime files if not embedded, or GPL/LGPL notices if embedded
 - iPad Swift client source
 - driver package only if users are expected to install a development test driver
 - clear warning that test-signed driver install requires test-signing setup
 - third-party notices
 - GPL-2.0 notice/source-access information if `iproxy.exe` is bundled
+
+Use `scripts/Package-DevPreview.ps1` to create the zip under `dist/`.
 
 For a normal public release, do not ship the driver until it is properly signed for distribution.
 

@@ -34,6 +34,8 @@ License notes:
 
 If a Windows release embeds or bundles `iproxy.exe`, treat that release as GPL-runtime packaging work: include the GPL-2.0 text, preserve notices, and provide the corresponding upstream source/access required by the license. If this is not desirable, keep the public repository source-only and require users to provide the tools locally.
 
+The repository includes local copies of `licenses/GPL-2.0.txt` and `licenses/LGPL-2.1.txt` so developer-preview zips can include the relevant license texts alongside the bundled runtime.
+
 The current app resource file expects these files under `x64/Release/` at build time:
 
 ```text
