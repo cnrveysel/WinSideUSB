@@ -6,6 +6,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$installLog = Join-Path $env:TEMP "WinSideUSBDevPreviewInstall.log"
+try {
+    Start-Transcript -Path $installLog -Append | Out-Null
+}
+catch {
+    $installLog = $null
+}
+
 function Require-File([string]$Path) {
     if (-not (Test-Path $Path -PathType Leaf)) {
         throw "Required file missing: $Path"
@@ -70,6 +78,9 @@ $testSigningOn = $testSigningText -match "testsigning\s+Yes"
 
 Write-Host ""
 Write-Host "WinSideUSB Developer Preview Installer"
+if ($installLog) {
+    Write-Host "Installer log: $installLog"
+}
 Write-Host "Install directory: $InstallDir"
 Write-Host "Secure Boot: $secureBoot"
 Write-Host "Windows test-signing: $(if ($testSigningOn) { 'on' } else { 'off or unknown' })"
@@ -129,3 +140,9 @@ Write-Host ""
 Write-Host "Installed WinSideUSB Developer Preview."
 Write-Host "Run: $InstallDir\x64\Release\WinSideUSB.exe"
 Write-Host "iPad Swift client source: $InstallDir\WinSideUSB\swiftclientcode.swift"
+
+try {
+    Stop-Transcript | Out-Null
+}
+catch {
+}

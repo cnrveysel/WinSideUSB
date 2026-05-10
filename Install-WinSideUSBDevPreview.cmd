@@ -9,5 +9,12 @@ if not exist "%SCRIPT%" (
   exit /b 1
 )
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process PowerShell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File ""%SCRIPT%""'"
+net session >nul 2>&1
+if not "%errorlevel%"=="0" (
+  echo Requesting administrator permission...
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+  exit /b
+)
 
+echo Running WinSideUSB Developer Preview installer...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -File "%SCRIPT%"
