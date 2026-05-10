@@ -126,7 +126,7 @@ See [docs/DRIVER.md](docs/DRIVER.md) for details.
 
 ## Developer Preview Zip
 
-For testers who explicitly want a downloadable build, maintainers can publish a developer-preview zip with the app, test-signed driver package, iPad Swift client source, install helper, and license notices.
+For testers who explicitly want a downloadable build, maintainers can publish a developer-preview zip with the app, test-signed driver package, iPad Swift client source, install helper, shortcuts, and license notices.
 
 This is not a production installer. It still requires Administrator access, Windows test-signing setup, and the usual test-driver warnings.
 
@@ -137,6 +137,12 @@ After building the app and driver:
 ```
 
 See [docs/DEV_PREVIEW_RELEASE.md](docs/DEV_PREVIEW_RELEASE.md).
+
+Inside the zip, testers can start with:
+
+```text
+Install-WinSideUSBDevPreview.cmd
+```
 
 ## Run
 

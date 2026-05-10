@@ -33,6 +33,9 @@ Require-File (Join-Path $driverDir "IddSampleDriver.dll")
 Require-File (Join-Path $driverDir "iddsampledriver.cat")
 Require-File (Join-Path $repoRoot "WinSideUSB\swiftclientcode.swift")
 Require-File (Join-Path $repoRoot "scripts\Install-DevDriver.ps1")
+Require-File (Join-Path $repoRoot "scripts\Install-WinSideUSBDevPreview.ps1")
+Require-File (Join-Path $repoRoot "scripts\Uninstall-WinSideUSBDevPreview.ps1")
+Require-File (Join-Path $repoRoot "Install-WinSideUSBDevPreview.cmd")
 Require-File (Join-Path $repoRoot "licenses\GPL-2.0.txt")
 Require-File (Join-Path $repoRoot "licenses\LGPL-2.1.txt")
 
@@ -56,6 +59,9 @@ Copy-Item -LiteralPath $driverDir -Destination (Join-Path $packageRoot "x64\Rele
 
 Copy-Item -LiteralPath (Join-Path $repoRoot "WinSideUSB\swiftclientcode.swift") -Destination (Join-Path $packageRoot "WinSideUSB\swiftclientcode.swift") -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot "scripts\Install-DevDriver.ps1") -Destination (Join-Path $packageRoot "scripts\Install-DevDriver.ps1") -Force
+Copy-Item -LiteralPath (Join-Path $repoRoot "scripts\Install-WinSideUSBDevPreview.ps1") -Destination (Join-Path $packageRoot "scripts\Install-WinSideUSBDevPreview.ps1") -Force
+Copy-Item -LiteralPath (Join-Path $repoRoot "scripts\Uninstall-WinSideUSBDevPreview.ps1") -Destination (Join-Path $packageRoot "scripts\Uninstall-WinSideUSBDevPreview.ps1") -Force
+Copy-Item -LiteralPath (Join-Path $repoRoot "Install-WinSideUSBDevPreview.cmd") -Destination (Join-Path $packageRoot "Install-WinSideUSBDevPreview.cmd") -Force
 
 foreach ($file in @("README.md", "LICENSE", "NOTICE.md", "SECURITY.md", "CONTRIBUTING.md")) {
     Copy-Item -LiteralPath (Join-Path $repoRoot $file) -Destination (Join-Path $packageRoot $file) -Force
@@ -75,12 +81,10 @@ WinSideUSB $Version Developer Preview
 This package is experimental. It includes a test-signed development driver.
 
 Quick start:
-1. Open PowerShell as Administrator in this folder.
-2. Run:
-   Set-ExecutionPolicy -Scope Process Bypass -Force
-   .\scripts\Install-DevDriver.ps1
-3. Run the iPad Swift client from WinSideUSB\swiftclientcode.swift.
-4. Start .\x64\Release\WinSideUSB.exe.
+1. Double-click Install-WinSideUSBDevPreview.cmd, or open PowerShell as Administrator and run:
+   .\scripts\Install-WinSideUSBDevPreview.ps1
+2. Run the iPad Swift client from WinSideUSB\swiftclientcode.swift.
+3. Start WinSideUSB from the desktop/start-menu shortcut.
 
 Important:
 - Test-signed drivers may require Secure Boot to be disabled and Windows test-signing mode enabled.

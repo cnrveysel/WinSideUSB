@@ -19,7 +19,10 @@
 - `README.md`
 - `docs/`
 - `scripts/Install-DevDriver.ps1`
+- `scripts/Install-WinSideUSBDevPreview.ps1`
+- `scripts/Uninstall-WinSideUSBDevPreview.ps1`
 - `scripts/Package-DevPreview.ps1`
+- `Install-WinSideUSBDevPreview.cmd`
 - `.gitignore`
 - `.gitattributes`
 - `LICENSE`
@@ -63,6 +66,9 @@ For a downloadable development build:
 - `x64/Release/IddSampleDriver/`
 - `x64/Release/IddSampleDriver.cer`
 - `scripts/Install-DevDriver.ps1`
+- `scripts/Install-WinSideUSBDevPreview.ps1`
+- `scripts/Uninstall-WinSideUSBDevPreview.ps1`
+- `Install-WinSideUSBDevPreview.cmd`
 - `WinSideUSB/swiftclientcode.swift`
 - libimobiledevice runtime files if not embedded, or GPL/LGPL notices if embedded
 - iPad Swift client source

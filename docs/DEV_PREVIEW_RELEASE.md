@@ -10,6 +10,9 @@ This is not a normal consumer installer. The driver is test-signed and may requi
 - `x64/Release/IddSampleDriver/` driver package
 - `x64/Release/IddSampleDriver.cer` test certificate
 - `scripts/Install-DevDriver.ps1`
+- `scripts/Install-WinSideUSBDevPreview.ps1`
+- `scripts/Uninstall-WinSideUSBDevPreview.ps1`
+- `Install-WinSideUSBDevPreview.cmd`
 - `WinSideUSB/swiftclientcode.swift`
 - README, troubleshooting docs, notices, and license texts
 
@@ -40,22 +43,39 @@ Then reboot.
 ## Tester Quick Start
 
 1. Extract the zip.
-2. Open PowerShell as Administrator in the extracted folder.
-3. Install the development driver:
+2. Double-click:
+
+```text
+Install-WinSideUSBDevPreview.cmd
+```
+
+This opens an elevated PowerShell installer.
+
+Alternatively, open PowerShell as Administrator in the extracted folder and run:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-.\scripts\Install-DevDriver.ps1
+.\scripts\Install-WinSideUSBDevPreview.ps1
 ```
 
-4. Run the iPad Swift client and wait for `PC bekleniyor`.
-5. Run:
+3. Run the iPad Swift client and wait for `PC bekleniyor`.
+4. Run WinSideUSB from the desktop/start-menu shortcut, or:
 
 ```powershell
-.\x64\Release\WinSideUSB.exe
+& "$env:ProgramFiles\WinSideUSB\x64\Release\WinSideUSB.exe"
 ```
 
-6. Press Start.
+5. Press Start.
+
+## Uninstall
+
+Open PowerShell as Administrator and run:
+
+```powershell
+& "$env:ProgramFiles\WinSideUSB\scripts\Uninstall-WinSideUSBDevPreview.ps1"
+```
+
+The uninstaller removes shortcuts, installed files, and the root-enumerated WinSideUSB display device when possible.
 
 ## Packaging
 
@@ -66,4 +86,3 @@ Build the app and driver first, then run:
 ```
 
 The zip is written under `dist/`.
-
