@@ -44,7 +44,7 @@ Then reboot.
 
 Download `WinSideUSB-*-dev-preview.zip` from GitHub Releases. Do not use GitHub's green **Code -> Download ZIP** button for installation; that download is source code only and does not include the built `.exe` or driver package.
 
-1. Extract the developer-preview zip.
+1. Extract the developer-preview zip. Do not run the installer from inside Windows' ZIP preview.
 2. Double-click:
 
 ```text

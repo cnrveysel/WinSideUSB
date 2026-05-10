@@ -81,10 +81,11 @@ WinSideUSB $Version Developer Preview
 This package is experimental. It includes a test-signed development driver.
 
 Quick start:
-1. Double-click Install-WinSideUSBDevPreview.cmd, or open PowerShell as Administrator and run:
+1. Extract this ZIP first. Do not run the installer from inside Windows' ZIP preview.
+2. Double-click Install-WinSideUSBDevPreview.cmd, or open PowerShell as Administrator and run:
    .\scripts\Install-WinSideUSBDevPreview.ps1
-2. Run the iPad Swift client from WinSideUSB\swiftclientcode.swift.
-3. Start WinSideUSB from the desktop/start-menu shortcut.
+3. Run the iPad Swift client from WinSideUSB\swiftclientcode.swift.
+4. Start WinSideUSB from the desktop/start-menu shortcut.
 
 Important:
 - Test-signed drivers may require Secure Boot to be disabled and Windows test-signing mode enabled.
