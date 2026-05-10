@@ -51,7 +51,9 @@ Download `WinSideUSB-*-dev-preview.zip` from GitHub Releases. Do not use GitHub'
 Install-WinSideUSBDevPreview.cmd
 ```
 
-This opens an elevated PowerShell installer.
+This opens the main setup window. If Administrator permission is needed, it opens an elevated Command Prompt and keeps the result visible.
+
+The setup checks Secure Boot and Windows test-signing before driver installation. If the app files are installed but the virtual display driver cannot load yet, the setup prints the required follow-up steps instead of closing silently.
 
 Alternatively, open PowerShell as Administrator in the extracted folder and run:
 

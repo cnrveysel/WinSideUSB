@@ -82,13 +82,14 @@ This package is experimental. It includes a test-signed development driver.
 
 Quick start:
 1. Extract this ZIP first. Do not run the installer from inside Windows' ZIP preview.
-2. Double-click Install-WinSideUSBDevPreview.cmd, or open PowerShell as Administrator and run:
-   .\scripts\Install-WinSideUSBDevPreview.ps1
+2. Double-click Install-WinSideUSBDevPreview.cmd.
+   The setup window stays open and explains the final result.
 3. Run the iPad Swift client from WinSideUSB\swiftclientcode.swift.
 4. Start WinSideUSB from the desktop/start-menu shortcut.
 
 Important:
-- Test-signed drivers may require Secure Boot to be disabled and Windows test-signing mode enabled.
+- The setup can install the app files even when the driver is not ready yet.
+- If Secure Boot is ON or Windows test-signing is OFF, the setup will show the exact steps required before the virtual display driver can load.
 - Anti-cheat/protected games may refuse to run while test-signing is enabled.
 - This is not a production driver or consumer installer.
 - Read docs\DEV_PREVIEW_RELEASE.md before installing.
