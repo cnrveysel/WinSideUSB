@@ -6,6 +6,7 @@ This is an experimental Windows-to-iPad USB display streamer. Contributions are 
 
 ## Before Opening a PR
 
+- Work on a separate branch and review `git diff` before committing.
 - Keep generated binaries out of git.
 - Do not commit driver certificates, private keys, SDK headers, logs, dumps, or telemetry CSVs.
 - Test Windows app changes with `Release | x64` when possible.
