@@ -20,6 +20,14 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="WindowUI.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SharedDisplayProtocol.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="SignedDisplayClient.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="SignedDisplayOutput.h"><Filter>Header Files</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
     <ResourceCompile Include="WinSideUSB.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>

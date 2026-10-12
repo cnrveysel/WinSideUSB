@@ -63,7 +63,7 @@ Copy-Item -LiteralPath (Join-Path $repoRoot "scripts\Install-WinSideUSBDevPrevie
 Copy-Item -LiteralPath (Join-Path $repoRoot "scripts\Uninstall-WinSideUSBDevPreview.ps1") -Destination (Join-Path $packageRoot "scripts\Uninstall-WinSideUSBDevPreview.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot "Install-WinSideUSBDevPreview.cmd") -Destination (Join-Path $packageRoot "Install-WinSideUSBDevPreview.cmd") -Force
 
-foreach ($file in @("README.md", "LICENSE", "NOTICE.md", "SECURITY.md", "CONTRIBUTING.md")) {
+foreach ($file in @("README.md", "ROADMAP.md", "LICENSE", "NOTICE.md", "SECURITY.md", "CONTRIBUTING.md")) {
     Copy-Item -LiteralPath (Join-Path $repoRoot $file) -Destination (Join-Path $packageRoot $file) -Force
 }
 

@@ -1,0 +1,6 @@
+.build/
+.swiftpm/
+.sourcekit-lsp/
+.bsp/
+xtool/
+artifacts/

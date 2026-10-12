@@ -2,7 +2,9 @@
 
 WinSideUSB uses a Windows Indirect Display Driver (IDD) to create a virtual monitor only while streaming.
 
-The app controls the driver through a custom device interface and three IOCTLs:
+The default Signed setup uses the unchanged trusted-signed upstream MttVDD package and a native display service to enable its owned device only while an iPad client is connected. It does not require test mode. See [SIGNED_DISPLAY.md](SIGNED_DISPLAY.md) and [SETUP.md](SETUP.md).
+
+The remainder of this document describes the separate **legacy development driver** in `IddSampleDriver/`. In that workflow the app controls the driver through a custom device interface and three IOCTLs:
 
 ```text
 IOCTL_IDD_SET_RESOLUTION
@@ -126,4 +128,8 @@ C:\ProgramData\Microsoft\Windows\WER\
 
 ## Public Distribution
 
-Test signing is not acceptable for normal users. Public releases need Microsoft driver signing through the normal Windows driver signing flow. Until that is done, describe the driver as development-only.
+The default Signed installer now reuses the trusted, unchanged x64 [Virtual Display Driver 25.7.23](https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/tag/25.7.23) under its MIT license. The DLL and CAT signatures and INF/DLL catalog membership have been verified. Clean Windows 11 x64 installation with Secure Boot on and test-signing off, real iPad disconnect/reconnect and uninstall remain hardware validation gates. Our separate `IddSampleDriver` package remains development-signed and Development setup still requires test-signing.
+
+WinSideUSB's IDD is a user-mode UMDF driver; kernel-mode signing requirements should not be applied to it indiscriminately. For ordinary x64 Windows, Microsoft's PnP installation rules accept a driver catalog signed by WHQL or a trusted third-party release certificate. A commercial release-signing path can therefore be evaluated for this driver; a Microsoft signature is not automatically the only option. See [the IDD model](https://learn.microsoft.com/en-us/windows-hardware/drivers/display/indirect-display-driver-model-overview) and [PnP signing requirements](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/pnp-device-installation-signing-requirements--windows-vista-and-later-).
+
+Validate the actual signed DLL/catalog package on clean supported systems with Secure Boot enabled and test signing disabled before claiming normal installation support. WHQL is the recommended certification path; targets such as S mode and ARM64 have additional signing requirements and need separate validation.

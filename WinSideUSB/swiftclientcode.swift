@@ -4,13 +4,13 @@ import Network
 import AVFoundation
 import VideoToolbox
 import Darwin
+import UIKit
 
 @main
 struct MyApp: App {
     var body: some Scene {
         WindowGroup {
             MainView()
-                .preferredColorScheme(.dark)
         }
     }
 }
@@ -700,7 +700,8 @@ final class VideoReceiver: NSObject, ObservableObject {
         renderer.enqueue(s)
         self.enqueueCount += 1
         self.enqueuedLog += 1
-        if self.enqueueCount % 60 == 0 {
+        // Reveal the video on the first frame; keep periodic UI updates inexpensive.
+        if self.enqueueCount == 1 || self.enqueueCount % 60 == 0 {
             DispatchQueue.main.async { [weak self] in
                 self?.frames = self?.enqueueCount ?? 0
                 self?.status = "Streaming"
@@ -897,75 +898,401 @@ struct FullScreenWindowGroup: UIViewControllerRepresentable {
     func updateUIViewController(_ vc: UIViewController, context: Context) {}
 }
 
+// MARK: - iPad connection presentation
+
+// Map the existing receiver messages into UI states without changing the wire protocol.
+private enum ClientConnectionState: Equatable {
+    case waiting, preparing, streaming, reconnecting, error
+
+    init(status: String) {
+        let message = status.lowercased()
+        if message == "streaming" {
+            self = .streaming
+        } else if message.contains("koptu") {
+            self = .reconnecting
+        } else if message.contains("geçersiz") || message.contains("başlatılamadı") ||
+                    message.contains("portlar dolu") || message.contains("hatasi") ||
+                    message.contains("hazir degil") || message.contains("gonderilemedi") {
+            self = .error
+        } else if message.contains("baglandi") || message.contains("hazir -") ||
+                    message.contains("verisi geldi") || message.contains("yayin aliniyor") {
+            self = .preparing
+        } else {
+            self = .waiting
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .waiting: return "İkinci ekranınız hazır."
+        case .preparing: return "Ekranınız hazırlanıyor."
+        case .streaming: return "Windows ekranı bağlı"
+        case .reconnecting: return "Yeniden bağlanmaya hazır."
+        case .error: return "Bağlantı kurulamadı."
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .waiting: return "iPad'inizi Windows bilgisayarınıza USB ile bağlayın."
+        case .preparing: return "Bilgisayar bağlı. İlk görüntü bekleniyor."
+        case .streaming: return "USB üzerinden görüntü aktarılıyor."
+        case .reconnecting: return "USB bağlantısını kontrol edin, ardından Windows'ta yayını yeniden başlatın."
+        case .error: return "Uygulamayı yeniden açın. Sorun sürerse ayrıntılardaki kayıt dosyasını paylaşın."
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .waiting: return "BAĞLANTI BEKLENİYOR"
+        case .preparing: return "HAZIRLANIYOR"
+        case .streaming: return "BAĞLI"
+        case .reconnecting: return "BAĞLANTI KESİLDİ"
+        case .error: return "BAĞLANTI SORUNU"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .waiting: return "cable.connector"
+        case .preparing: return "arrow.triangle.2.circlepath"
+        case .streaming: return "checkmark.circle.fill"
+        case .reconnecting: return "cable.connector"
+        case .error: return "exclamationmark.circle.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .waiting, .preparing: return .blue
+        case .streaming: return .green
+        case .reconnecting, .error: return .orange
+        }
+    }
+}
+
 // MARK: - Main View
 
 struct MainView: View {
-    @StateObject var rx = VideoReceiver()
+    @StateObject private var rx = VideoReceiver()
     @State private var showOverlay = true
+    @State private var showDiagnostics = false
     @State private var hideTask: DispatchWorkItem?
-    
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private var connectionState: ClientConnectionState {
+        ClientConnectionState(status: rx.status)
+    }
+
+    private var isStreaming: Bool { connectionState == .streaming }
+    private var panelAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.25)
+    }
+
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            
-            // Full-screen video
-            VideoView(rx: rx).ignoresSafeArea()
-            
-            // Tap anywhere to toggle overlay
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture { toggleOverlay() }
-            
-            // Status overlay — auto-hides after 3 s
-            if showOverlay {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(rx.status)
-                        .foregroundColor(.green)
-                        .font(.caption2.monospaced())
-                    Text(rx.debug)
-                        .foregroundColor(.yellow)
-                        .font(.caption2.monospaced())
-                    Text("Frames: \(rx.frames)")
-                        .foregroundColor(.white)
-                        .font(.caption2.monospaced())
-                    Text(rx.logFile)
-                        .foregroundColor(.cyan)
-                        .font(.caption2.monospaced())
-                    if let logURL = rx.logURL {
-                        ShareLink(item: logURL) {
-                            Text("Share Log")
-                                .foregroundColor(.cyan)
-                                .font(.caption2.monospaced())
-                        }
-                    }
-                    Spacer()
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.ignoresSafeArea()
+                VideoView(rx: rx).ignoresSafeArea()
+
+                if !isStreaming {
+                    waitingBackground
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
                 }
-                .padding(.top, 12)
-                .padding(.leading, 12)
-                .transition(.opacity)
-                .animation(.easeInOut(duration: 0.3), value: showOverlay)
+
+                if showOverlay {
+                    VStack {
+                        if !isStreaming { Spacer(minLength: 0) }
+                        HStack {
+                            ViewThatFits(in: .vertical) {
+                                connectionPanel
+                                ScrollView(showsIndicators: false) {
+                                    connectionPanel
+                                }
+                                .frame(maxHeight: max(0, geometry.size.height - 40))
+                            }
+                            .frame(maxWidth: isStreaming ? 390 : 460)
+                            if isStreaming { Spacer(minLength: 0) }
+                        }
+                        if !isStreaming { Spacer(minLength: 0) }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity,
+                           alignment: isStreaming ? .bottomLeading : .center)
+                    .padding(20)
+                    .transition(.opacity)
+                } else {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Button(action: revealControls) {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.body.weight(.semibold))
+                                    .frame(width: 48, height: 48)
+                                    .background {
+                                        if reduceTransparency {
+                                            Circle().fill(Color(uiColor: .secondarySystemBackground))
+                                        } else {
+                                            Circle().fill(.regularMaterial)
+                                        }
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.primary)
+                            .accessibilityLabel("Bağlantı kontrollerini göster")
+                            .accessibilityHint("Durumu ve kayıt paylaşma seçeneklerini açar")
+                        }
+                        Spacer()
+                    }
+                    .padding(20)
+                    .transition(.opacity)
+                }
             }
         }
-        // Hide system chrome (status bar, home indicator)
         .statusBar(hidden: true)
-        .ignoresSafeArea()
-        .onAppear {
-            rx.start()
-            scheduleHide()   // auto-hide overlay after 3 s on launch
+        .onAppear { rx.start() }
+        .onDisappear { hideTask?.cancel() }
+        .onChange(of: rx.status) { _ in updateControlsForConnection() }
+        .onChange(of: showDiagnostics) { _ in scheduleHide() }
+        .onReceive(NotificationCenter.default.publisher(for: UIAccessibility.voiceOverStatusDidChangeNotification)) { _ in
+            if UIAccessibility.isVoiceOverRunning { revealControls() }
+            else { scheduleHide() }
         }
     }
-    
-    private func toggleOverlay() {
-        withAnimation { showOverlay.toggle() }
-        if showOverlay { scheduleHide() }
+
+    private var waitingBackground: some View {
+        LinearGradient(
+            colors: colorScheme == .dark
+                ? [Color(red: 0.10, green: 0.12, blue: 0.16), Color(red: 0.04, green: 0.05, blue: 0.07)]
+                : [Color(red: 0.95, green: 0.97, blue: 1.0), Color(red: 0.88, green: 0.91, blue: 0.96)],
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        )
     }
-    
+
+    private var connectionPanel: some View {
+        VStack(alignment: .leading, spacing: isStreaming ? 20 : 28) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("WinSideUSB")
+                        .font(.headline)
+                    Text("iPad için ikinci ekran")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 12)
+                if isStreaming {
+                    Button(action: hideControls) {
+                        Image(systemName: "xmark")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                            .background(Color.primary.opacity(0.05), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Kontrolleri gizle")
+                } else {
+                    Image(systemName: "cable.connector")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+            }
+
+            if !isStreaming { displayIllustration }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Label(connectionState.label, systemImage: connectionState.symbol)
+                    .font(.caption.weight(.semibold))
+                    .tracking(1)
+                    .foregroundStyle(connectionState.tint)
+                Text(connectionState.title)
+                    .font(isStreaming ? .title3.weight(.semibold) : .largeTitle.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(connectionState.subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+
+            if connectionState == .waiting {
+                VStack(alignment: .leading, spacing: 16) {
+                    connectionStep(number: "1", text: "iPad'i USB kablosuyla bilgisayara bağlayın.")
+                    connectionStep(number: "2", text: "Windows'ta WinSideUSB'yi açıp yayını başlatın.")
+                }
+            }
+
+            if showDiagnostics {
+                diagnostics
+                    .transition(.opacity)
+            }
+
+            Divider()
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    diagnosticsButton
+                    Spacer(minLength: 0)
+                    shareLogButton
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    diagnosticsButton
+                    shareLogButton
+                }
+            }
+        }
+        .padding(isStreaming ? 24 : 30)
+        .background {
+            if reduceTransparency {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemBackground))
+            } else {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(.regularMaterial)
+            }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+                .allowsHitTesting(false)
+        }
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.18 : 0.08), radius: 24, y: 12)
+    }
+
+    private var displayIllustration: some View {
+        HStack(alignment: .center, spacing: 18) {
+            Image(systemName: "display")
+                .font(.system(size: 48, weight: .light))
+                .frame(maxWidth: .infinity)
+                .frame(height: 100)
+                .background(Color.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            Image(systemName: "cable.connector")
+                .font(.title3.weight(.medium))
+                .foregroundStyle(.tertiary)
+            Image(systemName: "ipad")
+                .font(.system(size: 42, weight: .light))
+                .frame(maxWidth: .infinity)
+                .frame(height: 100)
+                .background(Color.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        }
+        .foregroundStyle(.blue)
+        .frame(maxWidth: 300)
+        .frame(maxWidth: .infinity)
+        .accessibilityHidden(true)
+    }
+
+    private func connectionStep(number: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(number)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+                .background(Color.primary.opacity(0.05), in: Circle())
+                .accessibilityHidden(true)
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var diagnostics: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 20) {
+                metric(title: "Bağlantı", value: "USB")
+                metric(title: "Video", value: "H.264")
+                metric(title: "Alınan kare", value: rx.frames.formatted())
+            }
+            Divider()
+            Text(rx.status)
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(rx.debug)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(rx.logFile)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func metric(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.subheadline.weight(.medium))
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var diagnosticsButton: some View {
+        Button {
+            withAnimation(panelAnimation) { showDiagnostics.toggle() }
+        } label: {
+            Label("Ayrıntılar", systemImage: showDiagnostics ? "chevron.up" : "chevron.down")
+                .font(.subheadline.weight(.medium))
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .accessibilityValue(showDiagnostics ? "Açık" : "Kapalı")
+    }
+
+    @ViewBuilder
+    private var shareLogButton: some View {
+        if let logURL = rx.logURL {
+            ShareLink(item: logURL) {
+                Label("Kaydı paylaş", systemImage: "square.and.arrow.up")
+                    .font(.subheadline.weight(.medium))
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .tint(.blue)
+        }
+    }
+
+    private func updateControlsForConnection() {
+        if !isStreaming {
+            hideTask?.cancel()
+            withAnimation(panelAnimation) { showOverlay = true }
+        } else if showOverlay {
+            scheduleHide()
+        }
+    }
+
+    private func revealControls() {
+        withAnimation(panelAnimation) { showOverlay = true }
+        scheduleHide()
+    }
+
+    private func hideControls() {
+        hideTask?.cancel()
+        withAnimation(panelAnimation) {
+            showOverlay = false
+            showDiagnostics = false
+        }
+    }
+
     private func scheduleHide() {
         hideTask?.cancel()
+        guard isStreaming, showOverlay, !showDiagnostics,
+              !UIAccessibility.isVoiceOverRunning else { return }
         let task = DispatchWorkItem {
-            withAnimation { showOverlay = false }
+            withAnimation(panelAnimation) { showOverlay = false }
         }
         hideTask = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: task)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: task)
     }
 }

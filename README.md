@@ -10,14 +10,23 @@ The primary tested target is an iPad Pro 12.9-inch M2-class display at `2732x204
 
 This is a personal research project. It is not production-ready commercial display software yet.
 
-The fastest path is designed for NVIDIA GPUs with NVENC, but the app also has Windows Media Foundation hardware/software fallback paths for non-NVIDIA systems. The driver is still development-signed and must be installed manually. Public distribution would require proper Microsoft driver signing.
+The fastest path is designed for NVIDIA GPUs with NVENC, but the app also has Windows Media Foundation hardware/software fallback paths for non-NVIDIA systems. The default single-EXE setup uses the unchanged, trusted-signed x64 [Virtual Display Driver 25.7.23](https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/tag/25.7.23), a small display service, and the Visual C++ runtime. This package does not require test-signing or disabling Secure Boot. Clean-PC installation and real iPad streaming validation remain pending. See [docs/SIGNED_DISPLAY.md](docs/SIGNED_DISPLAY.md) and [docs/SETUP.md](docs/SETUP.md).
 
 This project is not affiliated with Apple or any commercial display product. iPad is a trademark of Apple Inc.
 
 Development note: WinSideUSB was built by Veysel as a personal engineering project with ChatGPT used as an AI pair-programming and research assistant for debugging, profiling, documentation, and iterative implementation work.
 
+## Roadmap
+
+The native Windows/iPad UI, single-EXE setup/uninstall, and ready-signed display-driver integration have been implemented. The managed display stays disabled until the iPad client connects and is disabled when that connection ends. Real-device UI checks and clean-PC installation/removal verification remain pending. Automatic provisioning of Apple's USB software and Apple Pencil writing/drawing input remain planned work.
+
+See [ROADMAP.md](ROADMAP.md) for the ordered checklist, dependencies, and completion criteria (in Turkish).
+
 ## Features
 
+- Minimal native Windows UI with a light theme, DPI-aware resizing, keyboard navigation, and a log-folder shortcut.
+- Adaptive iPad connection panel with setup guidance, expandable diagnostics, and controls that hide during streaming.
+- Single-EXE Windows setup with bundled Visual C++ runtime, driver installation, shortcuts, and a registered uninstaller.
 - USB-only iPad transport through the libimobiledevice/usbmux toolchain.
 - On-demand Windows virtual display through a custom IDD driver.
 - GPU capture with D3D11 Desktop Duplication.
@@ -46,6 +55,12 @@ WinSideUSB/swiftclientcode.swift
 IddSampleDriver.sln            Virtual display driver solution
 IddSampleDriver/               IDD driver source
 scripts/Install-DevDriver.ps1  Local test-driver install helper
+scripts/Build-Setup.ps1        Single-EXE setup packager
+scripts/Setup-Driver.ps1       Setup driver install/removal entry point
+scripts/Setup-DriverSupport.psm1
+scripts/Setup-Prerequisites.ps1
+WinSideUSBDisplayService/      Native display-service project
+installer/WinSideUSB.iss       Inno Setup installer source
 docs/                          Driver, iPad, troubleshooting, and release notes
 ```
 
@@ -53,23 +68,31 @@ docs/                          Driver, iPad, troubleshooting, and release notes
 
 ### Windows host
 
-- Windows 10 or Windows 11.
-- Visual Studio 2022 with Desktop development with C++.
-- Windows SDK.
-- Windows Driver Kit (WDK), required for building the IDD driver.
+- Windows 11 x64, build 22000 or later, matching the current driver INF.
+- Windows 11 N requires Microsoft's [Media Feature Pack](https://support.microsoft.com/en-us/windows/experience/platform-variants/media-feature-pack-for-windows-n); setup checks Media Foundation availability.
+- Apple Mobile Device Service and Apple USB support installed through Apple's software. Setup detects this prerequisite and offers official installation guidance if it is missing.
+- Microsoft Visual C++ v14 x64 runtime; the EXE setup bundles and installs it when needed.
 - NVIDIA GPU and driver for the native NVENC path. AMD and Intel systems may use the Media Foundation fallback path, but that path is less tested and may have higher latency or lower smoothness.
+- The default **Signed** setup uses a ready-signed driver and leaves Windows security settings unchanged. The optional legacy **Development** package still requires test-signing enabled and Secure Boot disabled.
+
+### Source build only
+
+- Visual Studio 2022 with Desktop development with C++ and the Windows SDK.
+- Windows Driver Kit (WDK), required only when building the separate legacy IDD driver.
 - NVIDIA Video Codec SDK header `nvEncodeAPI.h` for building the native NVENC path.
-- Test-signing enabled for the development driver.
+- Inno Setup 6.7+ compiler and an official Visual C++ x64 Redistributable for building the setup EXE.
 
 ### iPad
 
-- iPad with USB connection to the Windows host.
+- iPad running iPadOS 17 or later, with a USB connection to the Windows host.
 - Swift Playgrounds or an iOS app target that can run `WinSideUSB/swiftclientcode.swift`.
-- The iPad app must be open before pressing Start in the Windows app.
+- Keep the iPad app open. Windows automatically attempts to connect when it detects the USB iPad. **Start display** retries manually; **Stop display** pauses automatic connection until the iPad is unplugged/reconnected.
 
 ### USB tools
 
 The Windows app can embed `iproxy.exe`, `ideviceinfo.exe`, and required libimobiledevice DLLs as resources. These binaries are third-party runtime files and are not committed to the repository by default.
+
+The embedded tools still need Apple's USB service and device support on Windows. They do not install it themselves. Follow Apple's [Apple Devices / iTunes installation guidance](https://support.apple.com/en-us/118290) before running setup if Apple Mobile Device Service is absent. Apple's installer is not bundled with WinSideUSB.
 
 `iproxy` comes from the libimobiledevice/libusbmuxd project. If you distribute builds that include `iproxy.exe` or libimobiledevice DLLs, include the upstream license texts and attribution notices. See [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
 
@@ -90,11 +113,25 @@ $env:NVENC_INCLUDE_DIR = "C:\Path\To\Video_Codec_SDK\Interface"
 & "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" WinSideUSB.sln /p:Configuration=Release /p:Platform=x64
 ```
 
-Build the driver:
+For the optional development backend, build our driver:
 
 ```powershell
 & "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" IddSampleDriver.sln /p:Configuration=Release /p:Platform=x64
 ```
+
+## Setup EXE
+
+End users can double-click `WinSideUSB-<version>-Setup.exe`, approve administrator access, and install the app, ready-signed driver, display service, runtime, and shortcuts. Remove it through **Windows Settings → Apps → Installed apps**. The managed virtual display is disabled at rest; installation does not leave an active second desktop. See [SIGNED_DISPLAY.md](docs/SIGNED_DISPLAY.md) for lifecycle and exact-mode handling.
+
+Maintainers build a setup with:
+
+```powershell
+.\scripts\Get-SignedDisplayDriver.ps1
+.\scripts\Build-Setup.ps1 -Version "0.3.6" -DriverMode Signed `
+  -VcRedistPath "C:\Path\To\VC_redist.x64.exe"
+```
+
+The default **Signed** mode needs the app, display service, and unchanged signed upstream driver package. It validates the vendor signatures, catalog contents, and pinned hashes; our app/setup signing is optional in this mode. The optional **Release** mode retains its stricter own-driver and setup signing requirements. See [docs/SETUP.md](docs/SETUP.md) for build examples and remaining validation.
 
 ## Development Driver Install
 
@@ -124,9 +161,9 @@ pnputil /enum-devices /class Display /drivers
 
 See [docs/DRIVER.md](docs/DRIVER.md) for details.
 
-## Developer Preview Zip
+## Legacy Developer Preview Zip
 
-For testers who explicitly want a downloadable build, maintainers can publish a developer-preview zip with the app, test-signed driver package, iPad Swift client source, install helper, shortcuts, and license notices.
+The earlier developer-preview zip flow is still available, separately from the new EXE setup. Maintainers can package the app, test-signed driver, iPad source, CMD/PowerShell install helper, and license notices.
 
 This is not a production installer. It still requires Administrator access, Windows test-signing setup, and the usual test-driver warnings.
 
@@ -148,20 +185,13 @@ Install-WinSideUSBDevPreview.cmd
 
 ## Run
 
-1. Build or install the IDD driver.
+1. Install the normal setup EXE, or build/install the separate legacy development driver for source development.
 2. Copy the current `WinSideUSB/swiftclientcode.swift` into Swift Playgrounds or your iOS target.
-3. Launch the iPad app and wait for:
-
-```text
-BSD socket listener v2
-Port 17326 acik - PC bekleniyor...
-```
-
-The exact port may be `17326`, `17325`, `17324`, `17323`, `17322`, or `17321`.
+3. Launch the iPad app and wait for **İkinci ekranınız hazır.** The listener status is available under **Ayrıntılar**; the port may be `17326`, `17325`, `17324`, `17323`, `17322`, or `17321`.
 
 4. Connect the iPad over USB and trust the computer if prompted.
 5. Run `x64/Release/WinSideUSB.exe`.
-6. Press Start.
+6. The display connects automatically once the iPad app responds. Use **Stop display** to pause, change the existing pixel/Hz selection, and **Start display** to resume manually. Disconnecting USB or closing either app releases the second display.
 
 ## Diagnostics
 
@@ -173,17 +203,22 @@ Windows logs are written under:
 
 Useful files:
 
-- `winsideusb_diag.log`: connection, driver IOCTL, and cleanup events.
+- `winsideusb_diag.log`: connection, display service/mode configuration, and cleanup events.
 - `iproxy.log`: USB tunnel forwarding output.
 - `winsideusb_tx_*.csv`: per-second sender/capture/encoder telemetry.
 
+Use **View logs** in the Windows app to open the log folder.
+
 iPad logs are created in the app document directory and can be shared from the overlay.
+
+EXE setup logs and installation state are stored separately under `%ProgramData%\WinSideUSB`. See [docs/SETUP.md](docs/SETUP.md#setup-diagnostics).
 
 See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common failures.
 
 ## More Docs
 
 - [Driver install and recovery](docs/DRIVER.md)
+- [Single-EXE setup and uninstall](docs/SETUP.md)
 - [iPad client notes](docs/IPAD_CLIENT.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Third-party runtime notes](docs/THIRD_PARTY.md)

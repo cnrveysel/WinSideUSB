@@ -186,6 +186,7 @@ Look for:
 
     Copy-Item -LiteralPath (Join-Path $sourceRoot "WinSideUSB\swiftclientcode.swift") -Destination (Join-Path $InstallDir "WinSideUSB\swiftclientcode.swift") -Force
     Copy-Item -LiteralPath (Join-Path $sourceRoot "scripts\Install-DevDriver.ps1") -Destination (Join-Path $InstallDir "scripts\Install-DevDriver.ps1") -Force
+    Copy-Item -LiteralPath (Join-Path $sourceRoot "scripts\Uninstall-WinSideUSBDevPreview.ps1") -Destination (Join-Path $InstallDir "scripts\Uninstall-WinSideUSBDevPreview.ps1") -Force
 
     foreach ($dir in @("docs", "licenses")) {
         $src = Join-Path $sourceRoot $dir
@@ -194,7 +195,7 @@ Look for:
         }
     }
 
-    foreach ($file in @("README.md", "LICENSE", "NOTICE.md", "SECURITY.md", "CONTRIBUTING.md", "START_HERE_DEV_PREVIEW.txt")) {
+    foreach ($file in @("README.md", "ROADMAP.md", "LICENSE", "NOTICE.md", "SECURITY.md", "CONTRIBUTING.md", "START_HERE_DEV_PREVIEW.txt")) {
         $src = Join-Path $sourceRoot $file
         if (Test-Path $src -PathType Leaf) {
             Copy-Item -LiteralPath $src -Destination (Join-Path $InstallDir $file) -Force

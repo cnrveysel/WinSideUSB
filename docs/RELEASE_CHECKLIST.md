@@ -11,6 +11,7 @@
 - Keep NVIDIA SDK headers out of git.
 - Make sure `README.md` still matches the current handshake, ports, and driver install flow.
 - Make sure `docs/DRIVER.md` documents the current driver recovery steps.
+- Make sure [SETUP.md](SETUP.md) matches `Build-Setup.ps1`, installer behavior, and the driver INF's Windows 11 x64 minimum.
 
 ## Files To Commit
 
@@ -22,6 +23,11 @@
 - `scripts/Install-WinSideUSBDevPreview.ps1`
 - `scripts/Uninstall-WinSideUSBDevPreview.ps1`
 - `scripts/Package-DevPreview.ps1`
+- `scripts/Build-Setup.ps1`
+- `scripts/Get-SignedDisplayDriver.ps1`
+- `WinSideUSBDisplayService/`, signed display client/output/protocol/service sources, and `tests/`
+- `scripts/Setup-Driver.ps1`, `scripts/Setup-DriverSupport.psm1`, and `scripts/Setup-Prerequisites.ps1`
+- `installer/WinSideUSB.iss`
 - `Install-WinSideUSBDevPreview.cmd`
 - `.gitignore`
 - `.gitattributes`
@@ -45,20 +51,59 @@
 
 ## Local Smoke Test
 
-Before making a release zip:
+Before packaging a setup EXE or legacy release zip:
 
-1. Build `IddSampleDriver.sln` Release x64.
-2. Install the driver with `scripts/Install-DevDriver.ps1`.
-3. Confirm `WinSideUSB Virtual Display` is `Started`.
-4. Build `WinSideUSB.sln` Release x64.
-5. Run the iPad Swift client.
-6. Press Start in `WinSideUSB.exe`.
-7. Confirm iPad shows streaming.
-8. Stop streaming.
-9. Start again to confirm the IDD lifecycle does not regress.
-10. Confirm no new `Code 43` appears.
+1. Build `WinSideUSB.sln` Release x64, including the display service.
+2. Fetch the pinned unchanged upstream driver and build the Signed setup.
+3. Run installer ownership tests and native display/IPC tests without changing devices.
+4. On a Windows 11 x64 test machine with Secure Boot on and test-signing off, install the normal setup.
+5. Confirm the managed device is disabled and no extra desktop exists while idle.
+6. Open the Windows and iPad apps and connect USB; confirm automatic streaming.
+7. Confirm selected dimensions/Hz and unchanged physical monitor settings.
+8. Unplug while streaming and while the desktop is static; confirm removal and replug recovery.
+9. Test Stop, restart, exit, lock/logout and service crash recovery.
+10. Uninstall and reinstall; confirm no orphaned devices/services or Code 43.
 
-## Release Zip Contents
+The original `IddSampleDriver.sln` and manual test-driver install remain a separate development workflow.
+
+## Setup EXE Packaging
+
+- Build the Windows app with all 25 USB tool/runtime resources expected by `WinSideUSB.rc`.
+- For default Signed mode, use `Get-SignedDisplayDriver.ps1` to verify upstream 25.7.23; preserve original INF/DLL/CAT bytes and include its MIT notice. Build the native display service. For Development mode, supply our matching test certificate.
+- Obtain the official Microsoft Visual C++ x64 Redistributable, at least as recent as the app's MSVC toolset. Verify its origin and signature before packaging.
+- Build with `scripts/Build-Setup.ps1` and Inno Setup 6.7+; the source is `installer/WinSideUSB.iss`. See [SETUP.md](SETUP.md) for parameters and examples.
+- Confirm `WinSideUSB-<version>-Development-Setup.exe` is explicitly labeled Development and requires test-signing on/Secure Boot off without changing either setting.
+- Signed mode produces `WinSideUSB-<version>-Setup.exe` with a trusted upstream driver; our app/setup may be unsigned. Optional Release mode requires trusted app/own-driver signatures and `-SigningCertificateThumbprint` to sign setup/uninstaller. Record actual signature status instead of implying our unsigned setup is signed.
+- Include project license texts, Microsoft sample notices, iPad Swift source, and the setup/driver/client documentation.
+- Complete the third-party binary/version/source inventory for every embedded DLL/tool. Generic GPL/LGPL texts alone do not complete the corresponding-source and attribution work.
+- Keep Apple installers/DLLs out of the payload unless a verified redistribution arrangement covers them. The current setup requires existing Apple USB support and links to official installation guidance.
+- Keep source archives, checksums, and signature verification results with release build records. Keep private signing keys out of every artifact.
+
+## Setup Verification Matrix
+
+These are release gates to execute on test machines, not a record of completed tests:
+
+- [ ] Clean Windows 11 x64 installation without Visual Studio/WDK.
+- [ ] Missing Apple Mobile Device Service produces official installation guidance and a blocked prerequisite; a stopped service produces an actionable result.
+- [ ] Windows 11 N without Media Feature Pack is detected; official installation guidance and a restart resolve the prerequisite.
+- [ ] Absent/outdated Visual C++ runtime is installed; an existing newer shared runtime is preserved.
+- [ ] Development setup checks test-signing on and Secure Boot off; blocked prerequisites do not cause security-setting changes.
+- [ ] Default Signed setup installs and streams with Secure Boot on and test-signing off.
+- [ ] No extra desktop exists while idle; exact pixel/Hz settings and all physical monitors survive activation and disconnect.
+- [ ] Unrelated MttVDD installations are preserved and rejected before mutations; owned configuration, registry values and permissions are restored on uninstall.
+- [ ] Stop, static-desktop USB loss, process death, lock/logoff and service recovery release the managed display.
+- [ ] Administrator cancellation, driver trust failures, malformed/missing files, and interrupted installation do not report success.
+- [ ] Driver rollback removes only devices, packages, and certificates owned by the failed operation.
+- [ ] Upgrading preserves a usable installation and records the correct driver package/device identity.
+- [ ] Settings → Apps → Installed apps invokes the registered WinSideUSB uninstaller.
+- [ ] Uninstall removes owned app files, shortcuts, virtual device, and driver package; shared Apple software, runtimes, and unrelated devices remain intact.
+- [ ] Only development certificates imported by this installation are considered for removal; pre-existing/shared certificates remain intact.
+- [ ] Driver cleanup happens before app-file removal. Failures and restart-required status preserve the app/helper scripts, and uninstall can be retried after recovery/restart; driver exit code `3010` is treated as restart required.
+- [ ] Repeated uninstall, partial-install uninstall, and install → uninstall → reinstall work.
+- [ ] Physical iPad streams after setup, stops/restarts, and reconnects after USB removal without `Code 43`.
+- [ ] Retained setup state/logs in `%ProgramData%\WinSideUSB` and user streaming logs in `%LOCALAPPDATA%\WinSideUSB` match documented behavior.
+
+## Legacy Release Zip Contents
 
 For a downloadable development build:
 
@@ -79,11 +124,13 @@ For a downloadable development build:
 
 Use `scripts/Package-DevPreview.ps1` to create the zip under `dist/`.
 
-For a normal public release, do not ship the driver until it is properly signed for distribution.
+This ZIP/CMD/PowerShell flow is separate from the single-EXE installer. Verify its installed uninstall-script path before publishing a legacy preview.
+
+For a normal public release, use the verified unchanged signed upstream package and complete the hardware/clean-machine gates above.
 
 ## Public Repository Notes
 
 - Make clear that the project is experimental.
 - Make clear that development driver installs may require test-signing mode.
 - Do not imply affiliation with Apple or any commercial display product.
-- Prefer source-only publishing until the driver signing and third-party runtime packaging story is settled.
+- Complete hardware validation and third-party runtime/source inventory before public binary distribution.

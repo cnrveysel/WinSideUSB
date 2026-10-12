@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="tr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WinSideUSB · iPad bağlantısı</title>
+<style>
+  *{box-sizing:border-box}body{margin:0;background:#f5f5f7;color:#1d1d1f;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  main{max-width:740px;margin:68px auto;padding:0 24px}small{font-weight:600;letter-spacing:.03em;color:#6e6e73}h1{font-size:40px;line-height:1.12;letter-spacing:-.035em;margin:16px 0}p{color:#6e6e73}
+  section{margin:32px 0;background:white;padding:28px 32px;border-radius:24px;border:1px solid #e7e7eb}ol{padding-left:23px;margin:0}li{padding:9px 0 9px 5px}a{color:#0071e3;text-decoration:none}a:hover{text-decoration:underline}code{font:14px Consolas,monospace;background:#f5f5f7;padding:3px 6px;border-radius:5px}.note{font-size:14px}
+  @media(prefers-color-scheme:dark){body{background:#151516;color:#f5f5f7}section{background:#242426;border-color:#363638}p,small{color:#a1a1a6}code{background:#363638}a{color:#64adff}}
+  @media(max-width:540px){main{margin-top:36px}h1{font-size:32px}section{padding:20px}}
+</style>
+<main>
+  <small>WINSIDEUSB</small>
+  <h1>iPad'iniz. İkinci ekranınız.</h1>
+  <p>Windows kurulumu tamamlandıktan sonra iPad istemcisini açın ve USB üzerinden bağlanın.</p>
+  <section>
+    <ol>
+      <li><strong>iPad uygulamasını hazırlayın.</strong> Şu an istemci kaynak koduyla dağıtılıyor. iPadOS 17 veya üzerindeki iPad'de Swift Playgrounds kullanın ya da bir iOS uygulama hedefi oluşturun. Kurulu WinSideUSB klasöründeki <code>iPad\swiftclientcode.swift</code> dosyasını kullanın. Ayrıntılar aynı klasördeki <code>docs\IPAD_CLIENT.md</code> içinde.</li>
+      <li><strong>iPad istemcisini çalıştırın.</strong> Bağlantı bekleme ekranını açık tutun.</li>
+      <li><strong>USB kablosunu bağlayın.</strong> iPad'in kilidini açın; sorulursa “Bu bilgisayara güven” seçeneğini kabul edin.</li>
+      <li><strong>Windows'ta WinSideUSB'yi açın.</strong> iPad algılandığında görüntü modunu seçip <strong>Start display</strong> düğmesine basın.</li>
+    </ol>
+  </section>
+  <p class="note">iPad görünmüyorsa <a href="https://support.apple.com/118290">Apple Devices veya iTunes kurulumunu</a> kontrol edin. Windows uygulamasındaki <strong>Refresh device</strong> düğmesi algılamayı tekrar başlatır; <strong>View logs</strong> tanılama klasörünü açar.</p>
+  <p class="note">Geliştirme kurulumu test imzalı sürücü kullanır. Setup'ın istediği yeniden başlatmayı tamamladıktan sonra yayını başlatın.</p>
+</main>
+</html>

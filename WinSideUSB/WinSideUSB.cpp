@@ -39,6 +39,8 @@
 #include <nvEncodeAPI.h>
 #include "resource.h"
 #include "..\\IddSampleDriver\\IddIoctl.h"
+#include "SignedDisplayClient.h"
+#include "SignedDisplayOutput.h"
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "d3d11.lib")
@@ -92,6 +94,8 @@ enum StreamStatus : WPARAM {
 #define IDC_LABEL_STATUS 112
 #define IDC_LABEL_ENCODER 113
 #define IDC_LABEL_FPS    114
+#define IDC_HINT         115
+#define IDC_BTN_LOGS     116
 
 // ── iPad device database ─────────────────────────────────────────────
 struct iPadDef { const char* productType; const wchar_t* displayName; int w, h, maxFPS; };
@@ -240,6 +244,20 @@ static int               g_targetH = 2048;
 static std::atomic<int>  g_targetFPS{ 120 };
 static std::atomic<bool> g_detecting{ false };
 static std::atomic<bool> g_virtualDisplayAttached{ false };
+static winsideusb::SignedDisplayClient g_displayClient;
+static std::wstring      g_captureDisplayName;
+static std::string       g_detectedUdid;
+static std::atomic<bool> g_closing{ false };
+static std::thread       g_detectThread;
+static bool              g_streamCompletionPending = false;
+static bool              g_autoStartSuppressed = false;
+static bool              g_detectionSameDevice = false;
+static int               g_detectionMisses = 0;
+static ULONGLONG         g_nextAutoAttempt = 0;
+static ULONGLONG         g_nextPresenceCheck = 0;
+static std::atomic<bool> g_deviceChangePending{ false };
+static std::mutex        g_streamErrorMutex;
+static std::wstring      g_streamError;
 
 static constexpr int COLOR_TEST_GOP_SECONDS = 5;
 static constexpr int IDLE_HEARTBEAT_FPS = 4;
@@ -342,6 +360,30 @@ static bool IsLargeDirtyFrame(IDXGIOutputDuplication* dupl, int w, int h) {
 static void PostStatus(StreamStatus s) { if (g_hwnd) PostMessage(g_hwnd, WM_STREAM_STATUS, s, 0); }
 static void PostFPS(double fps) { if (g_hwnd) PostMessage(g_hwnd, WM_STREAM_FPS, (WPARAM)(fps * 10.0 + 0.5), 0); }
 static void DiagLog(const std::string& message);
+static std::string RunIdeviceinfo(const char* key, const std::string& udid = "", bool simple = false);
+
+static void SetStreamError(const std::wstring& message) {
+    std::lock_guard<std::mutex> lock(g_streamErrorMutex);
+    g_streamError = message;
+}
+
+static std::wstring GetStreamError() {
+    std::lock_guard<std::mutex> lock(g_streamErrorMutex);
+    return g_streamError;
+}
+
+static void RestoreFailedDisplayActivation(const winsideusb::DisplayStateSnapshot& original,
+    const std::wstring& instanceId) {
+    std::wstring error;
+    if (winsideusb::ValidatePhysicalDisplayState(original, instanceId, error)) return;
+    if (!winsideusb::RestoreDisplayState(original, error)) {
+        int count = WideCharToMultiByte(CP_UTF8, 0, error.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        std::vector<char> text(count > 0 ? count : 1, 0);
+        if (count > 0) WideCharToMultiByte(CP_UTF8, 0, error.c_str(), -1, text.data(), count, nullptr, nullptr);
+        DiagLog(std::string("original display topology could not be restored: ") + text.data());
+        SetStreamError(L"Windows could not restore the original display settings. Check Windows Display settings and view logs.");
+    }
+}
 
 static HANDLE OpenIddControlDevice() {
     HDEVINFO devs = SetupDiGetClassDevsW(
@@ -403,7 +445,7 @@ static bool SendIddIoctl(DWORD code, const void* input = nullptr, DWORD inputByt
     return ok != FALSE;
 }
 
-static bool ConnectVirtualDisplay(int w, int h, int fps) {
+static bool ConnectLegacyVirtualDisplay(int w, int h, int fps) {
     IddResolutionRequest req{};
     req.Width = (UINT32)w;
     req.Height = (UINT32)h;
@@ -431,6 +473,9 @@ static bool ConnectVirtualDisplay(int w, int h, int fps) {
 }
 
 static bool SetVirtualDisplayMode(int w, int h, int fps) {
+    // Signed-driver modes are applied once, after the actual iPad handshake.
+    // The mode selector is disabled during streaming, as before.
+    if (winsideusb::HasSignedDisplayConfiguration()) return !g_virtualDisplayAttached.load();
     IddResolutionRequest req{};
     req.Width = (UINT32)w;
     req.Height = (UINT32)h;
@@ -440,6 +485,11 @@ static bool SetVirtualDisplayMode(int w, int h, int fps) {
 }
 
 static bool DisconnectVirtualDisplay() {
+    if (winsideusb::HasSignedDisplayConfiguration()) {
+        g_displayClient.Close();
+        g_virtualDisplayAttached.store(false);
+        return true;
+    }
     bool ok = false;
     for (int attempt = 0; attempt < 3; ++attempt) {
         ok = SendIddIoctl(IOCTL_IDD_DISCONNECT_MONITOR);
@@ -448,6 +498,50 @@ static bool DisconnectVirtualDisplay() {
     }
     g_virtualDisplayAttached.store(false);
     return ok;
+}
+
+static bool ConnectVirtualDisplay(int w, int h, int fps) {
+    g_captureDisplayName.clear();
+    if (!winsideusb::HasSignedDisplayConfiguration()) return ConnectLegacyVirtualDisplay(w, h, fps);
+
+    if (!winsideusb::SignedDisplayClient::IsInstalledApp()) {
+        DiagLog("signed display refused: open the installed WinSideUSB from the Start menu");
+        SetStreamError(L"Open the installed WinSideUSB from the Start menu to start the display.");
+        return false;
+    }
+
+    winsideusb::DisplayStateSnapshot original;
+    std::wstring error, instanceId;
+    if (!winsideusb::CaptureDisplayState(original, error)) {
+        SetStreamError(L"Windows display settings could not be read. View logs for details.");
+        return false;
+    }
+    DWORD serviceError = 0;
+    if (!g_displayClient.Activate(instanceId, serviceError, g_stop)) {
+        DiagLog("signed display activation failed err=" + std::to_string(serviceError));
+        if (serviceError != ERROR_CANCELLED) SetStreamError(serviceError == ERROR_SUCCESS_REBOOT_REQUIRED ?
+            L"Restart Windows to finish preparing the display driver." :
+            L"The display service could not start. Run WinSideUSB setup again or view logs.");
+        g_displayClient.Close();
+        RestoreFailedDisplayActivation(original, instanceId);
+        return false;
+    }
+    g_virtualDisplayAttached.store(true);
+    HMONITOR monitor = nullptr;
+    if (!winsideusb::ConfigureManagedDisplay(w, h, fps, instanceId,
+        g_captureDisplayName, monitor, error, &original, &g_stop)) {
+        int bytes = WideCharToMultiByte(CP_UTF8, 0, error.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        std::vector<char> detail(bytes > 0 ? bytes : 1, 0);
+        if (bytes > 0) WideCharToMultiByte(CP_UTF8, 0, error.c_str(), -1, detail.data(), bytes, nullptr, nullptr);
+        DiagLog(std::string("signed display mode failed: ") + detail.data());
+        DisconnectVirtualDisplay();
+        if (!g_stop.load()) SetStreamError(L"The selected pixel size and refresh rate could not be applied. View logs for details.");
+        RestoreFailedDisplayActivation(original, instanceId);
+        return false;
+    }
+    DiagLog("signed display configured " + std::to_string(w) + "x" + std::to_string(h) +
+        "@" + std::to_string(fps) + "Hz");
+    return !g_stop.load();
 }
 
 struct StreamLogStats {
@@ -557,21 +651,6 @@ static void DiagLog(const std::string& message) {
         << std::setw(2) << st.wSecond << "."
         << std::setw(3) << st.wMilliseconds
         << " " << message << "\n";
-}
-
-static void KillStaleIproxy() {
-    STARTUPINFOA si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE;
-
-    PROCESS_INFORMATION pi{};
-    char cmd[] = "cmd.exe /c taskkill /IM iproxy.exe /F /T >nul 2>nul";
-    if (CreateProcessA(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-        WaitForSingleObject(pi.hProcess, 1500);
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-    }
 }
 
 static void StopIproxyProcess(PROCESS_INFORMATION& pi) {
@@ -1735,6 +1814,9 @@ static void StreamThread() {
     StreamLogStats          streamLog;
     PacketSender            packetSender;
     bool                    packetSenderStarted = false;
+    const std::string       streamUdid = g_detectedUdid;
+    std::atomic<bool>        watchStop{ false };
+    std::thread             connectionWatch;
 
     // ── QPC setup ───────────────────────────────────────────────────
     // Used everywhere instead of GetTickCount64() to avoid the ~15 ms
@@ -1749,7 +1831,6 @@ static void StreamThread() {
 
     // ── Auto-launch iproxy ───────────────────────────────────────────
     {
-        KillStaleIproxy();
         std::string toolDir = EnsureBundledToolsDirA();
         std::string iproxyLogPath = GetLocalAppDirA() + "\\iproxy.log";
 
@@ -1757,8 +1838,9 @@ static void StreamThread() {
             if (g_stop) break;
 
             StopIproxyProcess(iproxyPI);
-            std::string cmdLine = "\"" + toolDir + "\\iproxy.exe\" " +
-                std::to_string(WSUSB_LOCAL_PORT) + " " + std::to_string(devicePort);
+            std::string cmdLine = "\"" + toolDir + "\\iproxy.exe\"";
+            if (!streamUdid.empty()) cmdLine += " -u " + streamUdid;
+            cmdLine += " " + std::to_string(WSUSB_LOCAL_PORT) + " " + std::to_string(devicePort);
             std::vector<char> cmd(cmdLine.begin(), cmdLine.end());
             cmd.push_back('\0');
             SECURITY_ATTRIBUTES sa{};
@@ -1820,6 +1902,53 @@ static void StreamThread() {
     packetSender.Start(cS);
     packetSenderStarted = true;
 
+    // A static desktop may produce no frames. Check the tunnel independently of
+    // encoding so unplugging still closes the lease and removes the monitor.
+    connectionWatch = std::thread([&]() {
+        ULONGLONG lastPing = GetTickCount64(), lastProbe = lastPing;
+        int missingProbes = 0;
+        while (!watchStop.load() && !g_stop.load()) {
+            fd_set readable;
+            FD_ZERO(&readable); FD_SET(cS, &readable);
+            timeval timeout{ 0, 100000 };
+            int ready = select(0, &readable, nullptr, nullptr, &timeout);
+            if (ready == SOCKET_ERROR) {
+                DiagLog("connection watcher: tunnel read failed"); g_stop = true; break;
+            }
+            if (ready > 0) {
+                char byte = 0;
+                int received = recv(cS, &byte, 1, MSG_PEEK);
+                if (received == 0 || (received == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK)) {
+                    DiagLog("connection watcher: iPad tunnel closed"); g_stop = true; break;
+                }
+                if (received > 0) Sleep(100);
+            }
+            if (iproxyPI.hProcess && WaitForSingleObject(iproxyPI.hProcess, 0) == WAIT_OBJECT_0) {
+                DiagLog("connection watcher: USB proxy exited"); g_stop = true; break;
+            }
+            ULONGLONG now = GetTickCount64();
+            if (winsideusb::HasSignedDisplayConfiguration() && g_virtualDisplayAttached.load() &&
+                now - lastPing >= WinSideUSBDisplay::HeartbeatIntervalMs) {
+                DWORD error = 0;
+                if (!g_displayClient.Ping(error, g_stop)) {
+                    DiagLog("connection watcher: display lease failed err=" + std::to_string(error));
+                    if (!g_stop.load()) SetStreamError(L"The display service stopped. Run setup again or view logs.");
+                    g_stop = true; break;
+                }
+                lastPing = now;
+            }
+            if (!streamUdid.empty() && (g_deviceChangePending.exchange(false) || now - lastProbe >= 2000)) {
+                std::string present = RunIdeviceinfo("UniqueDeviceID", streamUdid, true);
+                missingProbes = present == streamUdid ? 0 : missingProbes + 1;
+                if (missingProbes >= 2) {
+                    DiagLog("connection watcher: selected USB iPad is absent"); g_stop = true; break;
+                }
+                lastProbe = GetTickCount64();
+            }
+        }
+        if (g_stop.load()) DisconnectVirtualDisplay();
+    });
+
     if (!g_stop) {
         if (!ConnectVirtualDisplay(W, H, FPS))
             goto CLEANUP;
@@ -1829,21 +1958,28 @@ static void StreamThread() {
     }
 
     // ── D3D11 + Desktop Duplication ──────────────────────────────────
-    CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&factory);
-    factory->EnumAdapters1(0, &adapter);
-
-    for (UINT i = 0; ; i++) {
-        IDXGIOutput* o = nullptr;
-        if (FAILED(adapter->EnumOutputs(i, &o)) || !o) break;
-        if (i == 0) { output = o; continue; }
-        if (output) output->Release();
-        output = o;
-        break;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&factory))) goto CLEANUP;
+    if (!g_captureDisplayName.empty()) {
+        if (!winsideusb::FindDXGIOutput(factory, g_captureDisplayName, &adapter, &output)) {
+            SetStreamError(L"The iPad display could not be captured. View logs for details.");
+            goto CLEANUP;
+        }
+    } else {
+        // Retain the original local development-driver path.
+        if (FAILED(factory->EnumAdapters1(0, &adapter))) goto CLEANUP;
+        for (UINT i = 0; ; i++) {
+            IDXGIOutput* o = nullptr;
+            if (FAILED(adapter->EnumOutputs(i, &o)) || !o) break;
+            if (i == 0) { output = o; continue; }
+            if (output) output->Release();
+            output = o;
+            break;
+        }
     }
 
-    D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, 0,
+    if (FAILED(D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, 0,
         D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
-        0, 0, D3D11_SDK_VERSION, &dev, &fl, &ctx);
+        0, 0, D3D11_SDK_VERSION, &dev, &fl, &ctx))) goto CLEANUP;
     {
         ID3D10Multithread* mt = nullptr;
         if (SUCCEEDED(dev->QueryInterface(__uuidof(ID3D10Multithread), (void**)&mt)))
@@ -1863,6 +1999,10 @@ static void StreamThread() {
     {
         DXGI_OUTDUPL_DESC dd{};
         dupl->GetDesc(&dd);
+        if (!winsideusb::IsExactDuplicationMode(dd, W, H, FPS)) {
+            SetStreamError(L"Windows changed the iPad display size or refresh rate. Reconnect to apply your selected mode.");
+            goto CLEANUP;
+        }
         if (dd.ModeDesc.RefreshRate.Denominator != 0) {
             sourceHz = (double)dd.ModeDesc.RefreshRate.Numerator /
                 (double)dd.ModeDesc.RefreshRate.Denominator;
@@ -2089,6 +2229,7 @@ static void StreamThread() {
 
         // ── Main capture/encode/send loop ────────────────────────────
         while (!g_stop) {
+            if (packetSender.Failed()) break;
             if (!nativeEncoder && !drainEncoder(enc, packetSender, configSent, frameCount, streamLog))
                 break;
             if (!dupl) {
@@ -2103,6 +2244,12 @@ static void StreamThread() {
                     flushLog();
                     std::this_thread::sleep_for(std::chrono::milliseconds(200));
                     continue;
+                }
+                DXGI_OUTDUPL_DESC resumed{};
+                dupl->GetDesc(&resumed);
+                if (!winsideusb::IsExactDuplicationMode(resumed, W, H, FPS)) {
+                    SetStreamError(L"Windows changed the iPad display mode. Reconnect to apply your selected mode.");
+                    break;
                 }
                 PostStatus(SS_CONNECTED);
                 previousPresentQPC = {};
@@ -2226,14 +2373,24 @@ static void StreamThread() {
             bool frameOk = false;
 
             ID3D11Texture2D* tex = nullptr;
-            res->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&tex);
+            if (res) res->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&tex);
             if (!tex) {
                 streamLog.frameBuildFailures++;
                 flushLog();
-                res->Release();
+                if (res) res->Release();
                 dupl->ReleaseFrame();
                 if (inSample) inSample->Release();
                 continue;
+            }
+            D3D11_TEXTURE2D_DESC capturedTexture{};
+            tex->GetDesc(&capturedTexture);
+            if (!winsideusb::IsExactCaptureTexture(capturedTexture, W, H)) {
+                SetStreamError(L"Windows changed the captured display size. Reconnect to apply your selected mode.");
+                tex->Release();
+                if (res) res->Release();
+                dupl->ReleaseFrame();
+                if (inSample) inSample->Release();
+                break;
             }
 
             if (nativeEncoder || useGPUInput) {
@@ -2387,6 +2544,8 @@ static void StreamThread() {
 
 CLEANUP:
     DiagLog("stream cleanup begin");
+    watchStop = true;
+    if (connectionWatch.joinable()) connectionWatch.join();
     timeEndPeriod(1);
     if (packetSenderStarted) packetSender.Stop();
     StopIproxyProcess(iproxyPI);
@@ -2403,6 +2562,7 @@ CLEANUP:
     if (factory) factory->Release();
     if (ctx)     ctx->Release();
     if (dev)     dev->Release();
+    DisconnectVirtualDisplay();
     if (cS != INVALID_SOCKET) closesocket(cS);
     WSACleanup(); MFShutdown(); CoUninitialize();
     g_streaming.store(false);
@@ -2414,9 +2574,19 @@ CLEANUP:
 // DEVICE DETECTION
 // ═══════════════════════════════════════════════════════════════════
 
-static std::string RunIdeviceinfo(const char* key) {
+static bool ValidDeviceUdid(const std::string& udid) {
+    if (udid.empty() || udid.size() > 64) return false;
+    for (char c : udid) if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+        (c >= 'A' && c <= 'F') || c == '-')) return false;
+    return true;
+}
+
+static std::string RunIdeviceinfo(const char* key, const std::string& udid, bool simple) {
+    if (!udid.empty() && !ValidDeviceUdid(udid)) return "";
     std::string toolDir = EnsureBundledToolsDirA();
     std::string cmdLine = "\"" + toolDir + "\\ideviceinfo.exe\" -k " + key;
+    if (!udid.empty()) cmdLine += " -u " + udid;
+    if (simple) cmdLine += " -s";
     std::vector<char> cmd(cmdLine.begin(), cmdLine.end());
     cmd.push_back('\0');
 
@@ -2434,12 +2604,36 @@ static std::string RunIdeviceinfo(const char* key) {
     if (CreateProcessA(NULL, cmd.data(), NULL, NULL, TRUE,
         CREATE_NO_WINDOW, NULL, toolDir.c_str(), &si, &pi)) {
         CloseHandle(hW);
-        char buf[256]; DWORD n;
-        while (ReadFile(hR, buf, sizeof(buf) - 1, &n, NULL) && n > 0)
-        {
-            buf[n] = 0; result += buf;
+        ULONGLONG deadline = GetTickCount64() + 2000;
+        bool finished = false;
+        while (!g_closing.load() && GetTickCount64() < deadline) {
+            DWORD available = 0;
+            if (!PeekNamedPipe(hR, nullptr, 0, nullptr, &available, nullptr)) {
+                // A tool can close stdout just before its process exits. Wait
+                // within the same deadline so valid output is not discarded.
+                if (GetLastError() == ERROR_BROKEN_PIPE &&
+                    WaitForSingleObject(pi.hProcess, 25) == WAIT_TIMEOUT) continue;
+                break;
+            }
+            if (available) {
+                char buf[256]; DWORD count = 0;
+                if (!ReadFile(hR, buf, (std::min)(available, (DWORD)sizeof(buf)), &count, nullptr)) break;
+                result.append(buf, count);
+                if (result.size() > 4096) break;
+            } else if (WaitForSingleObject(pi.hProcess, 0) == WAIT_OBJECT_0) {
+                finished = true; break;
+            } else Sleep(25);
         }
-        WaitForSingleObject(pi.hProcess, 5000);
+        finished = WaitForSingleObject(pi.hProcess, 0) == WAIT_OBJECT_0;
+        DWORD exitCode = STILL_ACTIVE;
+        GetExitCodeProcess(pi.hProcess, &exitCode);
+        if (!finished || exitCode != 0 || result.size() > 4096) {
+            if (exitCode == STILL_ACTIVE) {
+                TerminateProcess(pi.hProcess, ERROR_CANCELLED);
+                WaitForSingleObject(pi.hProcess, 1000);
+            }
+            result.clear();
+        }
         CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
     }
     else { CloseHandle(hW); }
@@ -2453,8 +2647,18 @@ static std::string RunIdeviceinfo(const char* key) {
 static std::wstring g_detectedName;
 static bool         g_detectFound = false;
 
-static void DetectThread() {
+static void DetectThread(HWND target) {
     std::string pt = RunIdeviceinfo("ProductType");
+    std::string udid = pt.rfind("iPad", 0) == 0 ? RunIdeviceinfo("UniqueDeviceID") : "";
+    if (!ValidDeviceUdid(udid)) { pt.clear(); udid.clear(); }
+    g_detectionSameDevice = !udid.empty() && udid == g_detectedUdid;
+    if (pt.empty() && g_detectFound && ++g_detectionMisses < 2) {
+        g_detectionSameDevice = true;
+        PostMessage(target, WM_DETECT_DONE, 0, 0);
+        return;
+    }
+    if (!pt.empty()) g_detectionMisses = 0;
+    g_detectedUdid = udid;
 
     g_detectFound = false;
     g_modeCount = 0;
@@ -2494,15 +2698,21 @@ static void DetectThread() {
             DisconnectVirtualDisplay();
     }
 
-    g_detecting = false;
-    PostMessage(g_hwnd, WM_DETECT_DONE, 0, 0);
+    PostMessage(target, WM_DETECT_DONE, 0, 0);
 }
 
-static void TriggerDetect(HWND hwnd) {
+static void OnDetectionStarted(HWND hwnd);
+static void OnStreamStarting(HWND hwnd);
+static void OnStreamStopping(HWND hwnd);
+static void OnUiStreamEnded(HWND hwnd);
+
+static void TriggerDetect(HWND hwnd, bool quiet = false) {
+    if (g_streaming.load() || g_streamCompletionPending || g_closing.load()) return;
     bool expected = false;
     if (!g_detecting.compare_exchange_strong(expected, true)) return;
-    SetWindowTextW(GetDlgItem(hwnd, IDC_BTN_DETECT), L"\u2026");
-    std::thread(DetectThread).detach();
+    if (g_detectThread.joinable()) g_detectThread.join();
+    if (!quiet) OnDetectionStarted(hwnd);
+    g_detectThread = std::thread(DetectThread, hwnd);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2510,29 +2720,29 @@ static void TriggerDetect(HWND hwnd) {
 // ═══════════════════════════════════════════════════════════════════
 
 static void StartStream(HWND hwnd) {
-    if (g_streaming.load()) return;
+    if (g_streaming.load() || g_streamCompletionPending || g_detecting.load() ||
+        g_closing.load() || !g_detectFound || g_modeCount <= 0) return;
     if (g_streamThread.joinable()) g_streamThread.join();
     g_stop = false;
+    SetStreamError(L"");
+    g_streamCompletionPending = true;
     g_streaming.store(true);
-    EnableWindow(GetDlgItem(hwnd, IDC_BTN_DETECT), FALSE);
-    EnableWindow(GetDlgItem(hwnd, IDC_COMBO_MODE), FALSE);
-    SetWindowTextW(GetDlgItem(hwnd, IDC_BTN_ACTION), L"Stop");
-    InvalidateRect(GetDlgItem(hwnd, IDC_BTN_ACTION), nullptr, TRUE);
+    OnStreamStarting(hwnd);
     g_streamThread = std::thread(StreamThread);
 }
 
 static void StopStream(HWND hwnd) {
+    g_autoStartSuppressed = true;
     g_stop = true;
-    DisconnectVirtualDisplay();
+    if (g_streaming.load()) OnStreamStopping(hwnd);
+    if (!g_streamCompletionPending) DisconnectVirtualDisplay();
 }
 
 static void OnStreamEnded(HWND hwnd) {
     DisconnectVirtualDisplay();
-    SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_FPS), L"\u2014");
-    SetWindowTextW(GetDlgItem(hwnd, IDC_BTN_ACTION), L"Start");
-    EnableWindow(GetDlgItem(hwnd, IDC_BTN_DETECT), TRUE);
-    EnableWindow(GetDlgItem(hwnd, IDC_COMBO_MODE), g_detectFound && g_modeCount > 0);
-    InvalidateRect(GetDlgItem(hwnd, IDC_BTN_ACTION), nullptr, TRUE);
+    g_streamCompletionPending = false;
+    g_nextAutoAttempt = GetTickCount64() + 3000;
+    OnUiStreamEnded(hwnd);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2573,452 +2783,43 @@ static void ShowTrayMenu(HWND hwnd) {
 // WINDOW
 // ═══════════════════════════════════════════════════════════════════
 
-static const int WIN_W = 500;
-static const int WIN_H = 380;
-static const int MARGIN = 24;
-static const int PANEL_X = 24;
-static const int PANEL_Y = 104;
-static const int PANEL_W = WIN_W - PANEL_X * 2;
-static const int PANEL_H = 192;
-static const int LBL_W = 86;
-static const int VALUE_X = PANEL_X + 116;
-static const int VALUE_W = PANEL_W - 140;
-static const int ROW_H = 32;
-static const int BTN_W = 150;
-static const int BTN_H = 38;
-static const int DBT_W = 42;
-static const int DBT_H = 38;
-
-static const COLORREF UI_BG = RGB(12, 15, 22);
-static const COLORREF UI_PANEL = RGB(24, 29, 39);
-static const COLORREF UI_PANEL_EDGE = RGB(52, 61, 76);
-static const COLORREF UI_TEXT = RGB(238, 243, 250);
-static const COLORREF UI_MUTED = RGB(145, 157, 176);
-static const COLORREF UI_ACCENT = RGB(76, 142, 255);
-static const COLORREF UI_ACCENT_DARK = RGB(42, 96, 190);
-static const COLORREF UI_DANGER = RGB(224, 74, 92);
-static const COLORREF UI_READY = RGB(72, 215, 151);
-static const COLORREF UI_WARN = RGB(245, 184, 83);
-
-static HBRUSH g_brBg = nullptr;
-static HBRUSH g_brPanel = nullptr;
-static HFONT  g_fontTitle = nullptr;
-static HFONT  g_fontBody = nullptr;
-static HFONT  g_fontSmall = nullptr;
-static HFONT  g_fontButton = nullptr;
-static COLORREF g_statusColor = UI_MUTED;
-static ULONG_PTR g_gdiplusToken = 0;
-
-static HFONT MakeFont(int pt, int weight) {
-    HDC hdc = GetDC(nullptr);
-    int height = -MulDiv(pt, GetDeviceCaps(hdc, LOGPIXELSY), 72);
-    ReleaseDC(nullptr, hdc);
-    return CreateFontW(height, 0, 0, 0, weight, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-}
-
-static void InitUiResources() {
-    if (!g_gdiplusToken) {
-        Gdiplus::GdiplusStartupInput gdiplusInput;
-        Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr);
-    }
-    if (!g_brBg) g_brBg = CreateSolidBrush(UI_BG);
-    if (!g_brPanel) g_brPanel = CreateSolidBrush(UI_PANEL);
-    if (!g_fontTitle) g_fontTitle = MakeFont(22, FW_SEMIBOLD);
-    if (!g_fontBody) g_fontBody = MakeFont(10, FW_NORMAL);
-    if (!g_fontSmall) g_fontSmall = MakeFont(9, FW_MEDIUM);
-    if (!g_fontButton) g_fontButton = MakeFont(10, FW_SEMIBOLD);
-}
-
-static void DestroyUiResources() {
-    if (g_brBg) { DeleteObject(g_brBg); g_brBg = nullptr; }
-    if (g_brPanel) { DeleteObject(g_brPanel); g_brPanel = nullptr; }
-    if (g_fontTitle) { DeleteObject(g_fontTitle); g_fontTitle = nullptr; }
-    if (g_fontBody) { DeleteObject(g_fontBody); g_fontBody = nullptr; }
-    if (g_fontSmall) { DeleteObject(g_fontSmall); g_fontSmall = nullptr; }
-    if (g_fontButton) { DeleteObject(g_fontButton); g_fontButton = nullptr; }
-    if (g_gdiplusToken) { Gdiplus::GdiplusShutdown(g_gdiplusToken); g_gdiplusToken = 0; }
-}
-
-static HWND CreateUiText(HWND hwnd, int id, const wchar_t* text, int x, int y, int w, int h, HFONT font) {
-    HWND child = CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE,
-        x, y, w, h, hwnd, (HMENU)(INT_PTR)id, nullptr, nullptr);
-    SendMessageW(child, WM_SETFONT, (WPARAM)font, TRUE);
-    return child;
-}
-
-static void SetChildFont(HWND hwnd, int id, HFONT font) {
-    HWND child = GetDlgItem(hwnd, id);
-    if (child) SendMessageW(child, WM_SETFONT, (WPARAM)font, TRUE);
-}
-
-static void EnableDarkTitleBar(HWND hwnd) {
-    BOOL enabled = TRUE;
-    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &enabled, sizeof(enabled));
-}
-
-static Gdiplus::Color GdiColor(COLORREF c, BYTE a = 255) {
-    return Gdiplus::Color(a, GetRValue(c), GetGValue(c), GetBValue(c));
-}
-
-static void AddRoundRectPath(Gdiplus::GraphicsPath& path, Gdiplus::REAL x, Gdiplus::REAL y,
-    Gdiplus::REAL w, Gdiplus::REAL h, Gdiplus::REAL r) {
-    Gdiplus::REAL d = r * 2.0f;
-    path.AddArc(x, y, d, d, 180.0f, 90.0f);
-    path.AddArc(x + w - d, y, d, d, 270.0f, 90.0f);
-    path.AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
-    path.AddArc(x, y + h - d, d, d, 90.0f, 90.0f);
-    path.CloseFigure();
-}
-
-static void PaintWindowChrome(HWND hwnd, HDC hdc) {
-    RECT rc{};
-    GetClientRect(hwnd, &rc);
-    Gdiplus::Graphics g(hdc);
-    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-    Gdiplus::SolidBrush bg(GdiColor(UI_BG));
-    g.FillRectangle(&bg, 0, 0, rc.right - rc.left, rc.bottom - rc.top);
-
-    Gdiplus::GraphicsPath panel;
-    AddRoundRectPath(panel, (Gdiplus::REAL)PANEL_X, (Gdiplus::REAL)PANEL_Y,
-        (Gdiplus::REAL)PANEL_W, (Gdiplus::REAL)PANEL_H, 11.0f);
-    Gdiplus::SolidBrush panelBrush(GdiColor(UI_PANEL));
-    Gdiplus::Pen panelPen(GdiColor(UI_PANEL_EDGE), 1.0f);
-    g.FillPath(&panelBrush, &panel);
-    g.DrawPath(&panelPen, &panel);
-
-    Gdiplus::SolidBrush accent(GdiColor(UI_ACCENT));
-    g.FillEllipse(&accent, (Gdiplus::REAL)MARGIN, 31.0f, 8.0f, 8.0f);
-}
-
-static void DrawModernButton(const DRAWITEMSTRUCT* dis) {
-    HDC hdc = dis->hDC;
-    RECT r = dis->rcItem;
-    bool disabled = (dis->itemState & ODS_DISABLED) != 0;
-    bool pressed = (dis->itemState & ODS_SELECTED) != 0;
-    bool action = dis->CtlID == IDC_BTN_ACTION;
-    COLORREF fill = action ? (g_streaming.load() ? UI_DANGER : UI_ACCENT) : RGB(37, 45, 58);
-    if (disabled) fill = RGB(42, 47, 56);
-    if (pressed && !disabled) fill = action ? UI_ACCENT_DARK : RGB(49, 58, 73);
-
-    Gdiplus::Graphics g(hdc);
-    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-    Gdiplus::GraphicsPath path;
-    AddRoundRectPath(path, (Gdiplus::REAL)r.left + 0.5f, (Gdiplus::REAL)r.top + 0.5f,
-        (Gdiplus::REAL)(r.right - r.left - 1), (Gdiplus::REAL)(r.bottom - r.top - 1), 9.0f);
-    Gdiplus::SolidBrush brush(GdiColor(fill));
-    Gdiplus::Pen pen(GdiColor(action ? fill : UI_PANEL_EDGE), 1.0f);
-    g.FillPath(&brush, &path);
-    g.DrawPath(&pen, &path);
-
-    if (dis->CtlID == IDC_BTN_DETECT) {
-        Gdiplus::Pen iconPen(GdiColor(disabled ? RGB(116, 124, 139) : UI_TEXT), 2.2f);
-        iconPen.SetStartCap(Gdiplus::LineCapRound);
-        iconPen.SetEndCap(Gdiplus::LineCapRound);
-        Gdiplus::RectF arc((Gdiplus::REAL)r.left + 13.0f, (Gdiplus::REAL)r.top + 11.0f, 16.0f, 16.0f);
-        g.DrawArc(&iconPen, arc, 42.0f, 285.0f);
-        Gdiplus::PointF pts[3] = {
-            Gdiplus::PointF((Gdiplus::REAL)r.left + 26.0f, (Gdiplus::REAL)r.top + 11.0f),
-            Gdiplus::PointF((Gdiplus::REAL)r.left + 30.0f, (Gdiplus::REAL)r.top + 11.0f),
-            Gdiplus::PointF((Gdiplus::REAL)r.left + 29.0f, (Gdiplus::REAL)r.top + 15.0f)
-        };
-        Gdiplus::SolidBrush iconBrush(GdiColor(disabled ? RGB(116, 124, 139) : UI_TEXT));
-        g.FillPolygon(&iconBrush, pts, 3);
-        return;
-    }
-
-    wchar_t text[64] = {};
-    GetWindowTextW(dis->hwndItem, text, 64);
-    SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, disabled ? RGB(116, 124, 139) : UI_TEXT);
-    SelectObject(hdc, g_fontButton);
-    DrawTextW(hdc, text, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-}
-
-static void DrawComboItem(const DRAWITEMSTRUCT* dis) {
-    HDC hdc = dis->hDC;
-    RECT r = dis->rcItem;
-    bool selected = (dis->itemState & ODS_SELECTED) != 0;
-    HBRUSH bg = CreateSolidBrush(selected ? RGB(37, 47, 64) : UI_PANEL);
-    FillRect(hdc, &r, bg);
-    DeleteObject(bg);
-
-    wchar_t text[96] = {};
-    int item = (int)dis->itemID;
-    if (item < 0) item = (int)SendMessageW(dis->hwndItem, CB_GETCURSEL, 0, 0);
-    if (item >= 0)
-        SendMessageW(dis->hwndItem, CB_GETLBTEXT, (WPARAM)item, (LPARAM)text);
-
-    SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, UI_TEXT);
-    SelectObject(hdc, g_fontBody);
-    RECT tr = r;
-    tr.left += 10;
-    tr.right -= 28;
-    DrawTextW(hdc, text, -1, &tr, DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-
-    HPEN pen = CreatePen(PS_SOLID, 1, UI_MUTED);
-    HGDIOBJ oldPen = SelectObject(hdc, pen);
-    int midY = (r.top + r.bottom) / 2;
-    POINT p[3] = { { r.right - 18, midY - 3 }, { r.right - 10, midY - 3 }, { r.right - 14, midY + 3 } };
-    HBRUSH arrow = CreateSolidBrush(UI_MUTED);
-    HGDIOBJ oldBrush = SelectObject(hdc, arrow);
-    Polygon(hdc, p, 3);
-    SelectObject(hdc, oldBrush);
-    SelectObject(hdc, oldPen);
-    DeleteObject(arrow);
-    DeleteObject(pen);
-}
-
-static bool IsLabelId(int id) {
-    return id == IDC_LABEL_IPAD || id == IDC_LABEL_MODE || id == IDC_LABEL_STATUS ||
-        id == IDC_LABEL_ENCODER || id == IDC_LABEL_FPS || id == IDC_SUBTITLE;
-}
-
-static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    switch (msg) {
-    case WM_CREATE: {
-        InitUiResources();
-        EnableDarkTitleBar(hwnd);
-
-        CreateUiText(hwnd, IDC_TITLE, L"WinSideUSB", MARGIN + 18, 22, 240, 32, g_fontTitle);
-        CreateUiText(hwnd, IDC_SUBTITLE, L"USB iPad display stream", MARGIN + 18, 56, 280, 22, g_fontSmall);
-
-        HWND detect = CreateWindowExW(0, L"BUTTON", L"",
-            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-            WIN_W - MARGIN - DBT_W, 30, DBT_W, DBT_H,
-            hwnd, (HMENU)IDC_BTN_DETECT, nullptr, nullptr);
-        SendMessageW(detect, WM_SETFONT, (WPARAM)g_fontButton, TRUE);
-
-        int rowY = PANEL_Y + 20;
-        CreateUiText(hwnd, IDC_LABEL_IPAD, L"iPad", PANEL_X + 20, rowY, LBL_W, 22, g_fontSmall);
-        CreateUiText(hwnd, IDC_LBL_IPAD, L"Detecting\u2026", VALUE_X, rowY, VALUE_W, 22, g_fontBody);
-        rowY += ROW_H;
-
-        CreateUiText(hwnd, IDC_LABEL_MODE, L"Mode", PANEL_X + 20, rowY + 3, LBL_W, 22, g_fontSmall);
-        HWND cMode = CreateWindowExW(0, L"COMBOBOX", nullptr,
-            WS_CHILD | WS_VISIBLE | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS,
-            VALUE_X, rowY - 4, VALUE_W, 190,
-            hwnd, (HMENU)IDC_COMBO_MODE, nullptr, nullptr);
-        SendMessageW(cMode, WM_SETFONT, (WPARAM)g_fontBody, TRUE);
-        SetWindowTheme(cMode, L"", L"");
-        EnableWindow(cMode, FALSE);
-        rowY += ROW_H + 8;
-
-        CreateUiText(hwnd, IDC_LABEL_STATUS, L"Status", PANEL_X + 20, rowY, LBL_W, 22, g_fontSmall);
-        CreateUiText(hwnd, IDC_LBL_STATUS, L"Ready", VALUE_X, rowY, VALUE_W, 22, g_fontBody);
-        rowY += ROW_H;
-
-        CreateUiText(hwnd, IDC_LABEL_ENCODER, L"Encoder", PANEL_X + 20, rowY, LBL_W, 22, g_fontSmall);
-        CreateUiText(hwnd, IDC_LBL_ENCODER, L"\u2014", VALUE_X, rowY, VALUE_W, 22, g_fontBody);
-        rowY += ROW_H;
-
-        CreateUiText(hwnd, IDC_LABEL_FPS, L"FPS", PANEL_X + 20, rowY, LBL_W, 22, g_fontSmall);
-        CreateUiText(hwnd, IDC_LBL_FPS, L"\u2014", VALUE_X, rowY, VALUE_W, 22, g_fontBody);
-
-        HWND btn = CreateWindowExW(0, L"BUTTON", L"Start",
-            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-            (WIN_W - BTN_W) / 2, WIN_H - 64, BTN_W, BTN_H,
-            hwnd, (HMENU)IDC_BTN_ACTION, nullptr, nullptr);
-        SendMessageW(btn, WM_SETFONT, (WPARAM)g_fontButton, TRUE);
-        EnableWindow(btn, FALSE);
-
-        TriggerDetect(hwnd);
-        break;
-    }
-
-    case WM_PAINT: {
-        PAINTSTRUCT ps{};
-        HDC hdc = BeginPaint(hwnd, &ps);
-        PaintWindowChrome(hwnd, hdc);
-        EndPaint(hwnd, &ps);
-        break;
-    }
-
-    case WM_ERASEBKGND:
-        return TRUE;
-
-    case WM_CTLCOLORSTATIC: {
-        HDC hdc = (HDC)wp;
-        HWND child = (HWND)lp;
-        int id = GetDlgCtrlID(child);
-        SetBkMode(hdc, TRANSPARENT);
-        if (id == IDC_TITLE) SetTextColor(hdc, UI_TEXT);
-        else if (id == IDC_LBL_STATUS) SetTextColor(hdc, g_statusColor);
-        else if (IsLabelId(id)) SetTextColor(hdc, UI_MUTED);
-        else SetTextColor(hdc, UI_TEXT);
-        return (LRESULT)((id == IDC_TITLE || id == IDC_SUBTITLE) ? g_brBg : g_brPanel);
-    }
-
-    case WM_CTLCOLORLISTBOX:
-    case WM_CTLCOLOREDIT: {
-        HDC hdc = (HDC)wp;
-        SetBkColor(hdc, UI_PANEL);
-        SetTextColor(hdc, UI_TEXT);
-        return (LRESULT)g_brPanel;
-    }
-
-    case WM_DRAWITEM: {
-        const DRAWITEMSTRUCT* dis = (const DRAWITEMSTRUCT*)lp;
-        if (dis && dis->CtlID == IDC_COMBO_MODE) {
-            DrawComboItem(dis);
-            return TRUE;
-        }
-        if (dis && (dis->CtlID == IDC_BTN_ACTION || dis->CtlID == IDC_BTN_DETECT)) {
-            DrawModernButton(dis);
-            return TRUE;
-        }
-        break;
-    }
-
-    case WM_MEASUREITEM: {
-        MEASUREITEMSTRUCT* mis = (MEASUREITEMSTRUCT*)lp;
-        if (mis && mis->CtlID == IDC_COMBO_MODE) {
-            mis->itemHeight = 26;
-            return TRUE;
-        }
-        break;
-    }
-
-    case WM_DETECT_DONE: {
-        SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_IPAD), g_detectedName.c_str());
-        HWND cMode = GetDlgItem(hwnd, IDC_COMBO_MODE);
-        SendMessageW(cMode, CB_RESETCONTENT, 0, 0);
-        if (g_detectFound && g_modeCount > 0) {
-            for (int i = 0; i < g_modeCount; i++) {
-                wchar_t buf[48];
-                swprintf_s(buf, L"%d \u00d7 %d @ %d Hz",
-                    g_modes[i].w, g_modes[i].h, g_modes[i].fps);
-                SendMessageW(cMode, CB_ADDSTRING, 0, (LPARAM)buf);
-            }
-            SendMessageW(cMode, CB_SETCURSEL, 0, 0);
-            g_targetW = g_modes[0].w;
-            g_targetH = g_modes[0].h;
-            g_targetFPS = g_modes[0].fps;
-            EnableWindow(cMode, TRUE);
-            EnableWindow(GetDlgItem(hwnd, IDC_BTN_ACTION), TRUE);
-        }
-        EnableWindow(GetDlgItem(hwnd, IDC_BTN_DETECT), TRUE);
-        SetWindowTextW(GetDlgItem(hwnd, IDC_BTN_DETECT), L"\u21ba");
-        break;
-    }
-
-    case WM_STREAM_STATUS:
-        switch ((StreamStatus)wp) {
-        case SS_CONNECTING:
-            g_statusColor = UI_WARN;
-            SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_STATUS), L"Connecting\u2026");
-            break;
-        case SS_WAITING_IPAD_APP:
-            g_statusColor = UI_WARN;
-            SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_STATUS), L"Waiting for iPad app");
-            break;
-        case SS_CONNECTED:
-            g_statusColor = UI_READY;
-            SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_STATUS), L"Connected");
-            break;
-        case SS_ENCODER_GPU: SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_ENCODER), L"Native NVENC / GPU"); break;
-        case SS_ENCODER_HW:  SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_ENCODER), L"NVENC + CPU convert"); break;
-        case SS_ENCODER_SW:  SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_ENCODER), L"Software");            break;
-        case SS_PAUSED:
-            g_statusColor = UI_WARN;
-            SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_STATUS), L"Paused by Windows");
-            break;
-        case SS_DISCONNECTED:
-            g_statusColor = UI_MUTED;
-            SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_STATUS), L"Disconnected");
-            OnStreamEnded(hwnd);
-            break;
-        }
-        InvalidateRect(GetDlgItem(hwnd, IDC_LBL_STATUS), nullptr, TRUE);
-        break;
-
-    case WM_STREAM_FPS: {
-        wchar_t buf[32]; swprintf_s(buf, L"%.1f", wp / 10.0);
-        SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_FPS), buf);
-        break;
-    }
-
-    case WM_DEVICECHANGE:
-        if ((wp == DBT_DEVNODES_CHANGED || wp == DBT_DEVICEARRIVAL) && !g_streaming.load())
-            TriggerDetect(hwnd);
-        break;
-
-    case WM_SIZE:
-        if (wp == SIZE_MINIMIZED) { ShowWindow(hwnd, SW_HIDE); AddTrayIcon(hwnd); }
-        break;
-
-    case WM_TRAY_MSG:
-        if (lp == WM_LBUTTONDBLCLK || lp == WM_RBUTTONUP) ShowTrayMenu(hwnd);
-        break;
-
-    case WM_COMMAND:
-        switch (LOWORD(wp)) {
-        case IDM_SHOW:
-            RemoveTrayIcon(); ShowWindow(hwnd, SW_RESTORE); SetForegroundWindow(hwnd);
-            break;
-        case IDC_BTN_DETECT:
-            TriggerDetect(hwnd);
-            break;
-        case IDC_COMBO_MODE:
-            if (HIWORD(wp) == CBN_SELCHANGE) {
-                int sel = (int)SendDlgItemMessageW(hwnd, IDC_COMBO_MODE, CB_GETCURSEL, 0, 0);
-                if (sel >= 0 && sel < g_modeCount) {
-                    g_targetW = g_modes[sel].w;
-                    g_targetH = g_modes[sel].h;
-                    g_targetFPS.store(g_modes[sel].fps);
-                    if (g_virtualDisplayAttached.load()) {
-                        SetVirtualDisplayMode(g_targetW, g_targetH, g_targetFPS.load());
-                    }
-                }
-            }
-            break;
-        case IDC_BTN_ACTION:
-            if (g_streaming.load()) StopStream(hwnd);
-            else             StartStream(hwnd);
-            break;
-        case IDM_EXIT:
-            StopStream(hwnd); DestroyWindow(hwnd);
-            break;
-        }
-        break;
-
-    case WM_CLOSE:
-        StopStream(hwnd); DestroyWindow(hwnd);
-        break;
-
-    case WM_DESTROY:
-        DisconnectVirtualDisplay();
-        RemoveTrayIcon();
-        DestroyUiResources();
-        PostQuitMessage(0);
-        break;
-    }
-    return DefWindowProcW(hwnd, msg, wp, lp);
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// ENTRY POINT
-// ═══════════════════════════════════════════════════════════════════
+#include "WindowUI.h"
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nShow) {
+    HANDLE instanceMutex = CreateMutexW(nullptr, TRUE, L"Local\\WinSideUSB.App");
+    if (instanceMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
+        HWND existing = FindWindowW(L"WinSideUSBWnd", nullptr);
+        if (existing) { ShowWindow(existing, SW_RESTORE); SetForegroundWindow(existing); }
+        CloseHandle(instanceMutex);
+        return 0;
+    }
+    // Match native controls, typography and vector artwork to the current monitor.
+    typedef BOOL(WINAPI* DpiAwarenessFn)(DPI_AWARENESS_CONTEXT);
+    DpiAwarenessFn setDpi = (DpiAwarenessFn)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetProcessDpiAwarenessContext");
+    if (!setDpi || !setDpi(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) SetProcessDPIAware();
+    g_uiDpi = WindowDpi(nullptr);
+    INITCOMMONCONTROLSEX controls{ sizeof(controls), ICC_STANDARD_CLASSES };
+    InitCommonControlsEx(&controls);
+
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInst;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+    wc.hbrBackground = nullptr;
     wc.lpszClassName = L"WinSideUSBWnd";
     wc.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
     RegisterClassExW(&wc);
 
-    RECT r = { 0, 0, WIN_W, WIN_H };
-    AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW & ~(WS_MAXIMIZEBOX | WS_THICKFRAME), FALSE);
+    RECT r = { 0, 0, Dip(WIN_W), Dip(WIN_H) };
+    typedef BOOL(WINAPI* AdjustDpiFn)(LPRECT, DWORD, BOOL, DWORD, UINT);
+    AdjustDpiFn adjustDpi = (AdjustDpiFn)GetProcAddress(GetModuleHandleW(L"user32.dll"), "AdjustWindowRectExForDpi");
+    if (adjustDpi) adjustDpi(&r, UI_WINDOW_STYLE, FALSE, 0, g_uiDpi);
+    else AdjustWindowRectEx(&r, UI_WINDOW_STYLE, FALSE, 0);
 
     g_hwnd = CreateWindowExW(0, L"WinSideUSBWnd", L"WinSideUSB",
-        WS_OVERLAPPEDWINDOW & ~(WS_MAXIMIZEBOX | WS_THICKFRAME),
+        UI_WINDOW_STYLE | WS_CLIPCHILDREN,
         CW_USEDEFAULT, CW_USEDEFAULT,
         r.right - r.left, r.bottom - r.top,
         nullptr, nullptr, hInst, nullptr);
@@ -3028,12 +2829,16 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nShow) {
 
     MSG m{};
     while (GetMessage(&m, nullptr, 0, 0)) {
+        if (IsDialogMessageW(g_hwnd, &m)) continue;
         TranslateMessage(&m);
         DispatchMessage(&m);
     }
 
     g_stop = true;
+    g_closing = true;
     if (g_streamThread.joinable()) g_streamThread.join();
+    if (g_detectThread.joinable()) g_detectThread.join();
     DisconnectVirtualDisplay();
+    if (instanceMutex) CloseHandle(instanceMutex);
     return (int)m.wParam;
 }

@@ -80,7 +80,9 @@ If Windows says it received `READY2`, the USB socket path is working and the pro
 
 ## Logs
 
-The iPad client creates CSV logs in the app document directory. Use the overlay Share Log button to export them.
+The iPad client creates CSV logs in the app document directory. Open **Ayrıntılar** in the connection panel to inspect the receiver status, frame count, and log path. Use **Kaydı paylaş** to export the log when a file is available.
+
+The panel stays visible while waiting, reconnecting, or reporting a connection error. During streaming it hides after five seconds; the small controls button opens it again. Opening diagnostics or using VoiceOver prevents automatic hiding. The interface follows the iPad's light/dark appearance and accessibility settings.
 
 The CSV includes:
 

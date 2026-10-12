@@ -70,6 +70,8 @@ Do not commit these binaries unless you intentionally vendor them and include al
 
 ## Microsoft IDD Sample Code
 
+The default Signed setup uses the unchanged ready-signed [Virtual Display Driver 25.7.23](https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/tag/25.7.23) x64 package instead of building our separate development driver. This upstream package is MIT licensed; preserve `licenses/Virtual-Display-Driver-MIT.txt` and the attribution in `NOTICE.md`. Packaging verifies the exact pinned INF/DLL/CAT and their trusted signatures/catalog membership. Configuration XML is generated independently and does not change signed driver bytes.
+
 The virtual display driver is based on the Microsoft Indirect Display Driver sample structure. Keep its original copyright notices.
 
 The Microsoft Windows Driver Samples repository is licensed under the Microsoft Public License (MS-PL). A copy is included at `licenses/Microsoft-Public-License.txt`.
