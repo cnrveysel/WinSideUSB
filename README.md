@@ -10,7 +10,9 @@ The primary tested target is an iPad Pro 12.9-inch M2-class display at `2732x204
 
 This is a personal research project. It is not production-ready commercial display software yet.
 
-The fastest path is designed for NVIDIA GPUs with NVENC, but the app also has Windows Media Foundation hardware/software fallback paths for non-NVIDIA systems. The default single-EXE setup uses the unchanged, trusted-signed x64 [Virtual Display Driver 25.7.23](https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/tag/25.7.23), a small display service, and the Visual C++ runtime. This package does not require test-signing or disabling Secure Boot. Clean-PC installation and real iPad streaming validation remain pending. See [docs/SIGNED_DISPLAY.md](docs/SIGNED_DISPLAY.md) and [docs/SETUP.md](docs/SETUP.md).
+The fastest path is designed for NVIDIA GPUs with NVENC, but the app also has Windows Media Foundation hardware/software fallback paths for non-NVIDIA systems. The default single-EXE setup uses the unchanged, trusted-signed x64 [Virtual Display Driver 25.7.23](https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/tag/25.7.23), a small display service, and the Visual C++ runtime. This package does not require test-signing or disabling Secure Boot. Installed-app USB streaming and exact display modes have been checked on the development machine; clean-PC installation/removal and other hardware remain to be tested. See [docs/SIGNED_DISPLAY.md](docs/SIGNED_DISPLAY.md) and [docs/SETUP.md](docs/SETUP.md).
+
+Windows 0.3.7 improves capture frame pacing while retaining the existing display modes and iPad protocol. A controlled 120 FPS motion comparison and its measurement limits are documented in [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 This project is not affiliated with Apple or any commercial display product. iPad is a trademark of Apple Inc.
 
@@ -127,7 +129,7 @@ Maintainers build a setup with:
 
 ```powershell
 .\scripts\Get-SignedDisplayDriver.ps1
-.\scripts\Build-Setup.ps1 -Version "0.3.6" -DriverMode Signed `
+.\scripts\Build-Setup.ps1 -Version "0.3.7" -DriverMode Signed `
   -VcRedistPath "C:\Path\To\VC_redist.x64.exe"
 ```
 

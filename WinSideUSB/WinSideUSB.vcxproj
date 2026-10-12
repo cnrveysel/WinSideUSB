@@ -142,6 +142,7 @@
     <ClInclude Include="SharedDisplayProtocol.h" />
     <ClInclude Include="SignedDisplayClient.h" />
     <ClInclude Include="SignedDisplayOutput.h" />
+    <ClInclude Include="FramePacing.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="WinSideUSB.rc" />

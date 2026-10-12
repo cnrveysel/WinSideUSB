@@ -2,7 +2,7 @@
 
 The Windows installer packages WinSideUSB, its ready-signed virtual display driver, display service, Microsoft Visual C++ x64 runtime, documentation, license notices, and iPad client source into one executable. It creates shortcuts and a Windows **Installed apps** entry with an uninstaller.
 
-The default **Signed** mode uses the unchanged trusted-signed Virtual Display Driver 25.7.23 x64 package. It does not require test mode or disabling Secure Boot. The separate Development/Release modes retain our own-driver workflows. Clean-PC install, uninstall and real iPad validation remain pending. See [SIGNED_DISPLAY.md](SIGNED_DISPLAY.md) for exact-mode handling, device lifetime and upstream limitations.
+The default **Signed** mode uses the unchanged trusted-signed Virtual Display Driver 25.7.23 x64 package. It does not require test mode or disabling Secure Boot. The separate Development/Release modes retain our own-driver workflows. Installed-app USB streaming and exact display modes have been checked on the development machine; clean-PC install/uninstall and other hardware remain to be tested. See [SIGNED_DISPLAY.md](SIGNED_DISPLAY.md) for exact-mode handling, device lifetime and upstream limitations, and [PERFORMANCE.md](PERFORMANCE.md) for the Windows 0.3.7 pacing comparison.
 
 ## Install On Windows
 
@@ -22,11 +22,11 @@ WinSideUSB setup does not install the iPad application. Use the included `swiftc
 
 | Mode | Output name | Driver requirement |
 | --- | --- | --- |
-| Signed (default) | `WinSideUSB-0.3.6-Setup.exe` | Original pinned MttVDD INF/DLL/CAT, trusted vendor signatures and catalog contents; native display service; no test-signing requirement |
+| Signed (default) | `WinSideUSB-0.3.7-Setup.exe` | Original pinned MttVDD INF/DLL/CAT, trusted vendor signatures and catalog contents; native display service; no test-signing requirement |
 | Development | `WinSideUSB-0.2.0-Development-Setup.exe` | Test-signed package, matching test certificate, test-signing already on, Secure Boot off |
 | Release | `WinSideUSB-0.2.0-Setup.exe` | Trusted app/DLL/CAT signatures and signed setup/uninstaller; clean-PC validation with Secure Boot on and test-signing off |
 
-The default version is `0.3.6` and mode is **Signed**. Signed verifies the original vendor files and trusted DLL/CAT signatures; it never imports a development certificate or changes Windows security settings. Signing our app/setup is optional in this mode. The optional **Release** mode retains trusted app/own-driver signatures and requires `-SigningCertificateThumbprint` to sign setup and its uninstaller. **Development** remains explicit and separately labeled.
+The default version is `0.3.7` and mode is **Signed**. Signed verifies the original vendor files and trusted DLL/CAT signatures; it never imports a development certificate or changes Windows security settings. Signing our app/setup is optional in this mode. The optional **Release** mode retains trusted app/own-driver signatures and requires `-SigningCertificateThumbprint` to sign setup and its uninstaller. **Development** remains explicit and separately labeled.
 
 Development app/setup executables may be unsigned. Only the public test certificate is included in a Development payload; private signing keys are never included.
 
@@ -42,7 +42,7 @@ For the normal ready-signed setup, build `WinSideUSB.sln` Release x64 (including
 
 ```powershell
 .\scripts\Get-SignedDisplayDriver.ps1
-.\scripts\Build-Setup.ps1 -Version "0.3.6" -DriverMode Signed `
+.\scripts\Build-Setup.ps1 -Version "0.3.7" -DriverMode Signed `
   -DriverPackageDir ".\.codex\vendor\VirtualDisplayDriver" `
   -ServicePath ".\x64\Release\WinSideUSBDisplayService.exe" `
   -VcRedistPath "C:\Path\To\VC_redist.x64.exe"
@@ -82,7 +82,7 @@ Additional build parameters:
 
 | Parameter | Purpose |
 | --- | --- |
-| `Version` | Package version; default `0.3.6` |
+| `Version` | Package version; default `0.3.7` |
 | `DriverMode` | `Signed` (default), `Release` or `Development` |
 | `ServicePath` | Built native display-service EXE; required for Signed mode |
 | `AppPath` | Built Windows app |

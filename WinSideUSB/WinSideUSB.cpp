@@ -41,6 +41,7 @@
 #include "..\\IddSampleDriver\\IddIoctl.h"
 #include "SignedDisplayClient.h"
 #include "SignedDisplayOutput.h"
+#include "FramePacing.h"
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "d3d11.lib")
@@ -588,6 +589,8 @@ struct StreamLogStats {
     ULONGLONG totalInputFrames = 0;
     ULONGLONG totalPackets = 0;
     ULONGLONG totalBytes = 0;
+    winsideusb::StageTiming acquireTiming, copySubmitTiming, nvMapTiming, nvSubmitTiming, nvLockTiming, nativeEncodeTiming;
+    double pacingLateMsMax = 0;
 
     void ResetInterval() {
         captureTimeouts = 0;
@@ -618,6 +621,9 @@ struct StreamLogStats {
         networkDroppedBytes = 0;
         networkQueueMaxPackets = 0;
         networkQueueMaxBytes = 0;
+        acquireTiming.Reset(); copySubmitTiming.Reset(); nvMapTiming.Reset();
+        nvSubmitTiming.Reset(); nvLockTiming.Reset(); nativeEncodeTiming.Reset();
+        pacingLateMsMax = 0;
     }
 };
 
@@ -779,9 +785,10 @@ static void OpenStreamLog(StreamLogStats& stats, int w, int h, int fps, const ch
         "frame_build_failures,input_frames,input_not_accepting,input_failures,"
         "output_packets,output_bytes,max_packet,send_slow,send_ms_total,send_ms_max,"
         "network_enqueued,network_dropped,network_dropped_bytes,network_queue_max_packets,network_queue_max_bytes,"
-        "total_input_frames,total_packets,total_bytes\n";
+        "total_input_frames,total_packets,total_bytes,"
+        "acquire_ms_avg,acquire_ms_max,copy_submit_ms_avg,nvenc_map_ms_avg,nvenc_submit_ms_avg,nvenc_lock_ms_avg,nvenc_total_ms_avg,nvenc_total_ms_max,pacing_late_ms_max\n";
     stats.file << "0.000," << w << "," << h << "," << fps << "," << std::fixed << std::setprecision(3) << sourceHz << "," << encoderName
-        << ",0,0,0,0,0,0,0.000,0.000,0,0,0," << fps << ",0,0,0,0,0,0,0,0,0,0.000,0.000,0,0,0,0,0,0,0,0\n";
+        << ",0,0,0,0,0,0,0.000,0.000,0,0,0," << fps << ",0,0,0,0,0,0,0,0,0,0.000,0.000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n";
 }
 
 static void LogStreamStatsIfNeeded(StreamLogStats& stats) {
@@ -831,7 +838,12 @@ static void LogStreamStatsIfNeeded(StreamLogStats& stats) {
         << stats.networkQueueMaxBytes << ","
         << stats.totalInputFrames << ","
         << stats.totalPackets << ","
-        << stats.totalBytes << "\n";
+        << stats.totalBytes << ","
+        << stats.acquireTiming.AverageMs() << "," << stats.acquireTiming.maxMs << ","
+        << stats.copySubmitTiming.AverageMs() << "," << stats.nvMapTiming.AverageMs() << ","
+        << stats.nvSubmitTiming.AverageMs() << "," << stats.nvLockTiming.AverageMs() << ","
+        << stats.nativeEncodeTiming.AverageMs() << "," << stats.nativeEncodeTiming.maxMs << ","
+        << stats.pacingLateMsMax << "\n";
     stats.file.flush();
     stats.last = now;
     stats.ResetInterval();
@@ -1644,14 +1656,20 @@ public:
 
     const std::vector<uint8_t>& Config() const { return config; }
 
-    bool Encode(bool forceIDR, std::vector<uint8_t>& out) {
+    bool Encode(bool forceIDR, std::vector<uint8_t>& out, StreamLogStats* stats = nullptr) {
+        winsideusb::ScopedStageTimer totalTiming(stats ? &stats->nativeEncodeTiming : nullptr,
+            stats ? stats->freq.QuadPart : 0);
         out.clear();
         if (!encoder || !registeredInput || !bitstream) return false;
 
         NV_ENC_MAP_INPUT_RESOURCE map{};
         map.version = NV_ENC_MAP_INPUT_RESOURCE_VER;
         map.registeredResource = registeredInput;
-        NVENCSTATUS st = nv.nvEncMapInputResource(encoder, &map);
+        NVENCSTATUS st;
+        {
+            winsideusb::ScopedStageTimer timing(stats ? &stats->nvMapTiming : nullptr, stats ? stats->freq.QuadPart : 0);
+            st = nv.nvEncMapInputResource(encoder, &map);
+        }
         if (st != NV_ENC_SUCCESS)
             return false;
 
@@ -1681,7 +1699,10 @@ public:
         }
 
         frameIndex++;
-        st = nv.nvEncEncodePicture(encoder, &pic);
+        {
+            winsideusb::ScopedStageTimer timing(stats ? &stats->nvSubmitTiming : nullptr, stats ? stats->freq.QuadPart : 0);
+            st = nv.nvEncEncodePicture(encoder, &pic);
+        }
         if (st == NV_ENC_ERR_NEED_MORE_INPUT) {
             unmap();
             return true;
@@ -1695,7 +1716,10 @@ public:
         lock.version = NV_ENC_LOCK_BITSTREAM_VER;
         lock.outputBitstream = bitstream;
         lock.doNotWait = 0;
-        st = nv.nvEncLockBitstream(encoder, &lock);
+        {
+            winsideusb::ScopedStageTimer timing(stats ? &stats->nvLockTiming : nullptr, stats ? stats->freq.QuadPart : 0);
+            st = nv.nvEncLockBitstream(encoder, &lock);
+        }
         if (st == NV_ENC_SUCCESS) {
             if (lock.bitstreamBufferPtr && lock.bitstreamSizeInBytes > 0) {
                 const uint8_t* src = (const uint8_t*)lock.bitstreamBufferPtr;
@@ -1800,7 +1824,9 @@ static void StreamThread() {
     IMFDXGIDeviceManager* devMgr = nullptr;
     ID3D11Texture2D* gpuTex = nullptr;
     ID3D11Texture2D* sTex = nullptr;
-    ID3D11Query* copyDoneQuery = nullptr;
+    bool duplicationFrameOwned = false;
+    winsideusb::CaptureThreadScheduling captureScheduling;
+    winsideusb::FrameDeadlineWaiter frameWaiter;
     IMFTransform* enc = nullptr;
     NativeNvencEncoder     nativeEnc;
     bool                    nativeEncoder = false;
@@ -1823,6 +1849,8 @@ static void StreamThread() {
     // resolution cap that GetTickCount64 has (it ignores timeBeginPeriod).
     LARGE_INTEGER qpfFreq;
     QueryPerformanceFrequency(&qpfFreq);
+    DiagLog(std::string("capture pacing: high resolution timer=") + (frameWaiter.HighResolution() ? "yes" : "fallback") +
+        ", MMCSS Capture=" + (captureScheduling.Active() ? "yes" : "unavailable"));
 
     timeBeginPeriod(1);
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
@@ -2030,11 +2058,6 @@ static void StreamThread() {
         d.Usage = D3D11_USAGE_STAGING; d.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
         dev->CreateTexture2D(&d, NULL, &sTex);
     }
-    {
-        D3D11_QUERY_DESC q{};
-        q.Query = D3D11_QUERY_EVENT;
-        dev->CreateQuery(&q, &copyDoneQuery);
-    }
 
     // ── Create Encoder ───────────────────────────────────────────────
     nativeEncoder = nativeEnc.Init(dev, gpuTex, W, H, FPS, HW_AVG_BITRATE, HW_MAX_BITRATE);
@@ -2210,22 +2233,6 @@ static void StreamThread() {
             packetSender.CollectStats(streamLog);
             LogStreamStatsIfNeeded(streamLog);
         };
-        auto waitForGpuCopy = [&]() {
-            if (!copyDoneQuery) {
-                ctx->Flush();
-                return;
-            }
-            ctx->End(copyDoneQuery);
-            while (!g_stop) {
-                HRESULT qhr = ctx->GetData(copyDoneQuery, nullptr, 0, 0);
-                if (qhr == S_OK) break;
-                if (qhr != S_FALSE) {
-                    ctx->Flush();
-                    break;
-                }
-                SwitchToThread();
-            }
-        };
 
         // ── Main capture/encode/send loop ────────────────────────────
         while (!g_stop) {
@@ -2263,34 +2270,37 @@ static void StreamThread() {
             updatePacingMode(nowQPC);
             if (nowQPC.QuadPart + activeFrameIntervalCounts / 8 < nextFrameQPC.QuadPart) {
                 streamLog.throttled++;
-                while (!g_stop && nowQPC.QuadPart + activeFrameIntervalCounts / 8 < nextFrameQPC.QuadPart) {
-                    LONGLONG waitCounts = nextFrameQPC.QuadPart - nowQPC.QuadPart - activeFrameIntervalCounts / 16;
-                    if (waitCounts > qpfFreq.QuadPart / 1000) {
-                        DWORD sleepMs = (DWORD)((waitCounts * 1000) / qpfFreq.QuadPart);
-                        if (sleepMs > 0) std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
-                    }
-                    else {
-                        SwitchToThread();
-                    }
-                    QueryPerformanceCounter(&nowQPC);
-                }
-                if (g_stop) break;
+                if (!frameWaiter.WaitUntil(nextFrameQPC.QuadPart - activeFrameIntervalCounts / 8,
+                    qpfFreq.QuadPart, g_stop)) break;
             }
+            QueryPerformanceCounter(&nowQPC);
+            if (nowQPC.QuadPart > nextFrameQPC.QuadPart)
+                streamLog.pacingLateMsMax = (std::max)(streamLog.pacingLateMsMax,
+                    (double)(nowQPC.QuadPart - nextFrameQPC.QuadPart) * 1000 / qpfFreq.QuadPart);
 
             DXGI_OUTDUPL_FRAME_INFO fi{}; IDXGIResource* res = nullptr;
-            HRESULT got = dupl->AcquireNextFrame(acquireTimeoutMs, &fi, &res);
+            // Retain ownership through GPU submission/encoding and pacing;
+            // minimize the gap where DXGI copies intermediate desktop updates.
+            if (duplicationFrameOwned) { dupl->ReleaseFrame(); duplicationFrameOwned = false; }
+            HRESULT got;
+            {
+                winsideusb::ScopedStageTimer timing(&streamLog.acquireTiming, qpfFreq.QuadPart);
+                got = dupl->AcquireNextFrame(acquireTimeoutMs, &fi, &res);
+            }
 
             if (got == DXGI_ERROR_WAIT_TIMEOUT) {
                 if (!nativeEncoder && !drainEncoder(enc, packetSender, configSent, frameCount, streamLog))
                     break;
                 streamLog.captureTimeouts++;
                 QueryPerformanceCounter(&nowQPC);
-                advanceNextFrame(nowQPC);
+                // No frame was produced: do not add another pacing wait after
+                // DXGI already waited for the source. Resume promptly on motion.
+                nextFrameQPC = nowQPC;
                 if (nativeEncoder && configSent && haveLastNativeFrame &&
                     nowQPC.QuadPart - lastIdleHeartbeatQPC.QuadPart >= idleHeartbeatIntervalCounts) {
                     bool forceHeartbeatKeyframe = packetSender.ConsumeKeyframeRequest();
                     std::vector<uint8_t> encoded;
-                    if (nativeEnc.Encode(forceHeartbeatKeyframe, encoded)) {
+                    if (nativeEnc.Encode(forceHeartbeatKeyframe, encoded, &streamLog)) {
                         streamLog.inputFrames++;
                         streamLog.totalInputFrames++;
                         if (forceHeartbeatKeyframe) {
@@ -2323,6 +2333,7 @@ static void StreamThread() {
             }
 
             QueryPerformanceCounter(&nowQPC);
+            duplicationFrameOwned = true;
             updatePacingMode(nowQPC);
             streamLog.captured++;
             if (streamLog.activeFPS < FPS) streamLog.panicFrames++;
@@ -2378,7 +2389,7 @@ static void StreamThread() {
                 streamLog.frameBuildFailures++;
                 flushLog();
                 if (res) res->Release();
-                dupl->ReleaseFrame();
+                dupl->ReleaseFrame(); duplicationFrameOwned = false;
                 if (inSample) inSample->Release();
                 continue;
             }
@@ -2388,15 +2399,20 @@ static void StreamThread() {
                 SetStreamError(L"Windows changed the captured display size. Reconnect to apply your selected mode.");
                 tex->Release();
                 if (res) res->Release();
-                dupl->ReleaseFrame();
+                dupl->ReleaseFrame(); duplicationFrameOwned = false;
                 if (inSample) inSample->Release();
                 break;
             }
 
             if (nativeEncoder || useGPUInput) {
-                ctx->CopyResource(gpuTex, tex);
+                {
+                    winsideusb::ScopedStageTimer timing(&streamLog.copySubmitTiming, qpfFreq.QuadPart);
+                    ctx->CopyResource(gpuTex, tex);
+                }
                 if (nativeEncoder) {
-                    waitForGpuCopy();
+                    // NvEncMapInputResource synchronizes prior D3D work. Keep
+                    // the duplication frame alive until Encode has completed.
+                    ctx->Flush();
                     haveLastNativeFrame = true;
                 }
             }
@@ -2409,7 +2425,7 @@ static void StreamThread() {
 
             if (tex) tex->Release();
             res->Release();
-            dupl->ReleaseFrame();
+            if (!nativeEncoder) { dupl->ReleaseFrame(); duplicationFrameOwned = false; }
 
             if (nativeEncoder) {
                 frameOk = true;
@@ -2462,7 +2478,7 @@ static void StreamThread() {
 
             if (nativeEncoder) {
                 std::vector<uint8_t> encoded;
-                if (nativeEnc.Encode(forceThisFrame, encoded)) {
+                if (nativeEnc.Encode(forceThisFrame, encoded, &streamLog)) {
                     streamLog.inputFrames++;
                     streamLog.totalInputFrames++;
                     if (!encoded.empty() && configSent) {
@@ -2552,7 +2568,7 @@ CLEANUP:
     nativeEnc.Shutdown();
     if (enc)     enc->Release();
     if (devMgr)  devMgr->Release();
-    if (copyDoneQuery) copyDoneQuery->Release();
+    if (dupl && duplicationFrameOwned) { dupl->ReleaseFrame(); duplicationFrameOwned = false; }
     if (gpuTex)  gpuTex->Release();
     if (sTex)    sTex->Release();
     if (dupl)    dupl->Release();
