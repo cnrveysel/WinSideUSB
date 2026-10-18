@@ -14,6 +14,8 @@ The fastest path is designed for NVIDIA GPUs with NVENC, but the app also has Wi
 
 Windows 0.3.7 improves capture frame pacing while retaining the existing display modes and iPad protocol. A controlled 120 FPS motion comparison and its measurement limits are documented in [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
+Windows 0.3.8 also composites the separate DXGI hardware cursor onto the video before encoding. Color, monochrome and masked cursors are supported on both GPU and software encoding paths; the existing iPad client can display the result.
+
 This project is not affiliated with Apple or any commercial display product. iPad is a trademark of Apple Inc.
 
 Development note: WinSideUSB was built by Veysel as a personal engineering project with ChatGPT used as an AI pair-programming and research assistant for debugging, profiling, documentation, and iterative implementation work.
@@ -129,7 +131,7 @@ Maintainers build a setup with:
 
 ```powershell
 .\scripts\Get-SignedDisplayDriver.ps1
-.\scripts\Build-Setup.ps1 -Version "0.3.7" -DriverMode Signed `
+.\scripts\Build-Setup.ps1 -Version "0.3.8" -DriverMode Signed `
   -VcRedistPath "C:\Path\To\VC_redist.x64.exe"
 ```
 

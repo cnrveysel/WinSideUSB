@@ -42,6 +42,7 @@
 #include "SignedDisplayClient.h"
 #include "SignedDisplayOutput.h"
 #include "FramePacing.h"
+#include "DesktopCursor.h"
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "d3d11.lib")
@@ -1827,6 +1828,9 @@ static void StreamThread() {
     bool duplicationFrameOwned = false;
     winsideusb::CaptureThreadScheduling captureScheduling;
     winsideusb::FrameDeadlineWaiter frameWaiter;
+    winsideusb::DesktopCursor desktopCursor;
+    HRESULT lastPointerError = S_OK;
+    bool cursorDrawLogged = false;
     IMFTransform* enc = nullptr;
     NativeNvencEncoder     nativeEnc;
     bool                    nativeEncoder = false;
@@ -2059,6 +2063,16 @@ static void StreamThread() {
         dev->CreateTexture2D(&d, NULL, &sTex);
     }
 
+    {
+        HRESULT hr = desktopCursor.Initialize(dev, ctx, gpuTex);
+        if (FAILED(hr)) {
+            DiagLog("cursor compositor initialization failed hr=" + std::to_string(static_cast<unsigned long>(hr)));
+            SetStreamError(L"Windows could not initialize the mouse cursor renderer. View logs for details.");
+            goto CLEANUP;
+        }
+        DiagLog("cursor compositor ready (GPU, color/monochrome/masked)");
+    }
+
     // ── Create Encoder ───────────────────────────────────────────────
     nativeEncoder = nativeEnc.Init(dev, gpuTex, W, H, FPS, HW_AVG_BITRATE, HW_MAX_BITRATE);
     if (nativeEncoder) {
@@ -2260,6 +2274,7 @@ static void StreamThread() {
                 }
                 PostStatus(SS_CONNECTED);
                 previousPresentQPC = {};
+                desktopCursor.ResetPointer();
                 packetSender.RequestKeyframe();
             }
 
@@ -2334,6 +2349,12 @@ static void StreamThread() {
 
             QueryPerformanceCounter(&nowQPC);
             duplicationFrameOwned = true;
+            {
+                HRESULT pointerHr = desktopCursor.UpdateFrame(dupl, fi);
+                if (FAILED(pointerHr) && pointerHr != lastPointerError)
+                    DiagLog("cursor shape update failed hr=" + std::to_string(static_cast<unsigned long>(pointerHr)));
+                lastPointerError = pointerHr;
+            }
             updatePacingMode(nowQPC);
             streamLog.captured++;
             if (streamLog.activeFPS < FPS) streamLog.panicFrames++;
@@ -2404,20 +2425,25 @@ static void StreamThread() {
                 break;
             }
 
-            if (nativeEncoder || useGPUInput) {
-                {
-                    winsideusb::ScopedStageTimer timing(&streamLog.copySubmitTiming, qpfFreq.QuadPart);
-                    ctx->CopyResource(gpuTex, tex);
-                }
-                if (nativeEncoder) {
-                    // NvEncMapInputResource synchronizes prior D3D work. Keep
-                    // the duplication frame alive until Encode has completed.
-                    ctx->Flush();
-                    haveLastNativeFrame = true;
+            {
+                winsideusb::ScopedStageTimer timing(&streamLog.copySubmitTiming, qpfFreq.QuadPart);
+                // Always start with the clean captured desktop, including
+                // pointer-only updates, so moving/hiding leaves no cursor trail.
+                ctx->CopyResource(gpuTex, tex);
+                if (desktopCursor.Draw() && !cursorDrawLogged) {
+                    DiagLog("cursor overlay first frame composited");
+                    cursorDrawLogged = true;
                 }
             }
-            else {
-                ctx->CopyResource(sTex, tex);
+            if (nativeEncoder) {
+                // NvEncMapInputResource synchronizes prior D3D work. Keep
+                // the duplication frame alive until Encode has completed.
+                ctx->Flush();
+                haveLastNativeFrame = true;
+            }
+            else if (!useGPUInput) {
+                // Software encoding must receive the same composited cursor.
+                ctx->CopyResource(sTex, gpuTex);
             }
 
             bool largeDirtyFrame = IsLargeDirtyFrame(dupl, W, H);
@@ -2566,6 +2592,7 @@ CLEANUP:
     if (packetSenderStarted) packetSender.Stop();
     StopIproxyProcess(iproxyPI);
     nativeEnc.Shutdown();
+    desktopCursor.Shutdown();
     if (enc)     enc->Release();
     if (devMgr)  devMgr->Release();
     if (dupl && duplicationFrameOwned) { dupl->ReleaseFrame(); duplicationFrameOwned = false; }

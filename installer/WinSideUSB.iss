@@ -3,7 +3,7 @@
   #error PayloadDir must be supplied by Build-Setup.ps1
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.3.7"
+  #define AppVersion "0.3.8"
 #endif
 #ifndef DriverMode
   #define DriverMode "Signed"

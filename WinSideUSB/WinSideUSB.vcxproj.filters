@@ -27,6 +27,7 @@
     <ClInclude Include="SignedDisplayClient.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="SignedDisplayOutput.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="FramePacing.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="DesktopCursor.h"><Filter>Header Files</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="WinSideUSB.rc">

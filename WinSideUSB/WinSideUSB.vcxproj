@@ -143,6 +143,7 @@
     <ClInclude Include="SignedDisplayClient.h" />
     <ClInclude Include="SignedDisplayOutput.h" />
     <ClInclude Include="FramePacing.h" />
+    <ClInclude Include="DesktopCursor.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="WinSideUSB.rc" />

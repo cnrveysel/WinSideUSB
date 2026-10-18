@@ -49,3 +49,15 @@ With the installed Windows app streaming to the existing iPad app at 120 Hz, run
 The benchmark emits JSON source timing measurements. Compare these with the matching `%LOCALAPPDATA%\WinSideUSB\winsideusb_tx_*.csv` file, selecting full intervals inside the animation window. Compute video rate from packet counts divided by the actual interval duration. CSV files include an initial zero row, which should be excluded. Source animation FPS and captured desktop timestamps are separate from iPad presentation FPS.
 
 The benchmark does not enable a display device or change a display mode. It requires the app's existing managed display lease and refuses a physical display fallback.
+
+## Windows cursor fix: 0.3.8
+
+The 0.3.7 source remains preserved in commit `6fe8023`. That version sent the captured desktop texture without drawing the separate hardware mouse pointer, so the iPad could show a desktop with no cursor. As described in Microsoft's [Desktop Duplication pointer documentation](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api#updating-the-desktop-pointer), a visible separate pointer must be composited by the capture client.
+
+The Windows client now caches DXGI pointer shapes and output-local positions. A D3D11 shader composites color, monochrome AND/XOR and masked-color pointers onto the encoder input. Only the clipped cursor background region is copied on the GPU; the native path adds no CPU image readback. The software encoder receives the same composited image. Hidden/already embedded pointers are skipped. Every new frame starts from the clean capture, including pointer-only updates, so moving or hiding the cursor does not leave a trail. Duplication recreation clears the cached pointer state.
+
+No iPad update or display mode change is required. The frame pacing and encoding parameters from 0.3.7 are retained. This correction has 26 D3D11 rendering checks covering alpha, XOR masks, pitch, clipping, stale state and cursor movement. Run them with:
+
+```powershell
+.\tests\Run-DesktopCursorTests.ps1
+```
