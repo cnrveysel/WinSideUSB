@@ -4,6 +4,49 @@
 namespace {
 int checks = 0;
 int failures = 0;
+struct ColorMock {
+    bool modern = true, hdr = true, wcg = false, unsupported = false, stubborn = false;
+    bool identityOkay = true, valuesZero = true;
+    LONG readError = ERROR_SUCCESS, writeError = ERROR_SUCCESS;
+    int reads = 0, pauses = 0;
+    std::vector<UINT> writes;
+    std::atomic<bool>* cancelOnWrite = nullptr;
+} colorMock;
+
+LONG WINAPI ReadColorMock(DISPLAYCONFIG_DEVICE_INFO_HEADER* header) {
+    using namespace winsideusb::display_color_detail;
+    ++colorMock.reads;
+    colorMock.identityOkay &= header->adapterId.LowPart == 42 && header->adapterId.HighPart == 7 && header->id == 8;
+    if (colorMock.readError != ERROR_SUCCESS) return colorMock.readError;
+    if (colorMock.unsupported) return ERROR_NOT_SUPPORTED;
+    if (header->type == static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(15)) {
+        if (!colorMock.modern) return ERROR_INVALID_PARAMETER;
+        auto& info = *reinterpret_cast<ColorInfo2*>(header);
+        info.value = (colorMock.hdr ? (1u << 5) : 0) | (colorMock.wcg ? (1u << 7) : 0);
+        info.activeMode = colorMock.hdr ? 2 : colorMock.wcg ? 1 : 0;
+        info.bitsPerChannel = colorMock.hdr ? 10 : 8;
+    } else {
+        auto& info = *reinterpret_cast<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO*>(header);
+        info.advancedColorEnabled = colorMock.hdr;
+        info.bitsPerColorChannel = colorMock.hdr ? 10 : 8;
+    }
+    return ERROR_SUCCESS;
+}
+
+LONG WINAPI WriteColorMock(DISPLAYCONFIG_DEVICE_INFO_HEADER* header) {
+    colorMock.identityOkay &= header->adapterId.LowPart == 42 && header->adapterId.HighPart == 7 && header->id == 8;
+    colorMock.valuesZero &= reinterpret_cast<winsideusb::display_color_detail::SetColor*>(header)->value == 0;
+    colorMock.writes.push_back(static_cast<UINT>(header->type));
+    if (colorMock.writeError != ERROR_SUCCESS) return colorMock.writeError;
+    if (!colorMock.stubborn) {
+        if (header->type == static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(17)) colorMock.wcg = false;
+        else colorMock.hdr = false;
+    }
+    if (colorMock.cancelOnWrite) *colorMock.cancelOnWrite = true;
+    return ERROR_SUCCESS;
+}
+void WINAPI PauseColorMock(DWORD) { ++colorMock.pauses; }
+
 void Check(bool result, const char* description) {
     ++checks;
     if (!result) { ++failures; std::cerr << "FAIL: " << description << '\n'; }
@@ -73,8 +116,49 @@ int main(int argc, char** argv) {
             AdapterName(path.targetInfo.adapterId, adapter);
             std::wcout << L"target=" << adapter << L" refresh=" << path.targetInfo.refreshRate.Numerator
                 << L"/" << path.targetInfo.refreshRate.Denominator << L'\n';
+            display_color_detail::ColorState color;
+            const LONG code = display_color_detail::Read(path, color);
+            std::wcout << L"color query=" << code << L" known=" << color.known << L" modern=" << color.modern
+                << L" HDR=" << color.hdr << L" WCG=" << color.wcg << L" active=" << color.active
+                << L" bits=" << color.bitsPerChannel << L'\n';
         }
         return 0;
+    }
+    {
+        using namespace display_color_detail;
+        const auto path = PathFixture().paths.front();
+        auto recover = [&](bool& changed, const std::atomic<bool>* cancel = nullptr) {
+            return EnsureSdr(path, changed, cancel, ReadColorMock, WriteColorMock, PauseColorMock);
+        };
+        bool changed = false;
+        colorMock = {};
+        Check(recover(changed) == ERROR_SUCCESS && changed && colorMock.writes == std::vector<UINT>{16} && !colorMock.hdr,
+            "modern saved HDR is disabled and verified using only SET_HDR_STATE");
+        Check(colorMock.identityOkay && colorMock.valuesZero, "every color request retains the target adapter/id and all set values disable only");
+        colorMock = {}; colorMock.hdr = false;
+        Check(recover(changed) == ERROR_SUCCESS && !changed && colorMock.writes.empty(), "already SDR output is never changed");
+        colorMock.wcg = true;
+        Check(recover(changed) == ERROR_SUCCESS && changed && colorMock.writes == std::vector<UINT>{17}, "WCG-only mode uses its own SDR transition");
+        colorMock = {}; colorMock.wcg = true;
+        Check(recover(changed) == ERROR_SUCCESS && colorMock.writes == std::vector<UINT>({16,17}), "HDR plus saved WCG preference both return to SDR");
+        colorMock = {}; colorMock.modern = false;
+        Check(recover(changed) == ERROR_SUCCESS && colorMock.writes == std::vector<UINT>{10}, "older Windows uses legacy Advanced Color off");
+        colorMock = {}; colorMock.unsupported = true;
+        Check(recover(changed) == ERROR_SUCCESS && !changed && colorMock.writes.empty(), "driver without Advanced Color queries is left unchanged");
+        colorMock = {}; colorMock.readError = ERROR_ACCESS_DENIED;
+        Check(recover(changed) == ERROR_ACCESS_DENIED && colorMock.reads == 1 && colorMock.writes.empty(), "query access error cannot fall through to an unchecked write");
+        colorMock = {}; colorMock.writeError = ERROR_ACCESS_DENIED;
+        Check(recover(changed) == ERROR_ACCESS_DENIED && !changed, "failed HDR setting is reported without claiming recovery");
+        colorMock = {}; colorMock.stubborn = true;
+        Check(recover(changed) == ERROR_TIMEOUT && colorMock.pauses == 30, "HDR setting must be verified and recovery wait is bounded");
+        std::atomic<bool> cancelled{true};
+        colorMock = {};
+        Check(recover(changed, &cancelled) == ERROR_CANCELLED && colorMock.reads == 0 && colorMock.writes.empty(), "cancelled recovery makes no color requests");
+        cancelled = false; colorMock.cancelOnWrite = &cancelled;
+        Check(recover(changed, &cancelled) == ERROR_CANCELLED && colorMock.writes.size() == 1, "cancellation after color change stops further requests");
+        std::wstring error;
+        Check(!EnsureManagedDisplaySdr(L"ROOT\\OTHER\\0000", changed, error) && !changed,
+            "physical or unrelated PnP target cannot enter managed SDR recovery");
     }
     Check(ExactRefresh(60, 1, 60), "60 Hz exact");
     Check(ExactRefresh(120000, 1000, 120), "120 Hz rational exact");

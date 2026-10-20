@@ -1,5 +1,11 @@
 # Troubleshooting
 
+## Disconnects after enabling HDR for the iPad display
+
+The current H.264 pipeline uses SDR BGRA input. Windows 0.3.9 automatically turns HDR/Advanced Color off for the exact WinSideUSB-owned virtual monitor before capture, including when Windows remembered HDR from an earlier connection. Physical monitors retain their own HDR preferences. Reconnect using the updated Windows app; no iPad app update is required.
+
+If HDR is enabled during a stream, capture is recreated after restoring SDR. The selected resolution and refresh rate are verified again rather than accepting a different mode. Display/color API failures are reported instead of copying an incompatible HDR texture into the encoder input.
+
 ## iPad shows "PC bekleniyor"
 
 First check whether Windows received the iPad handshake:

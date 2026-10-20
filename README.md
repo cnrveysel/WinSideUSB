@@ -16,6 +16,8 @@ Windows 0.3.7 improves capture frame pacing while retaining the existing display
 
 Windows 0.3.8 also composites the separate DXGI hardware cursor onto the video before encoding. Color, monochrome and masked cursors are supported on both GPU and software encoding paths; the existing iPad client can display the result.
 
+Windows 0.3.9 restores the owned iPad virtual display to SDR before capture. This clears an accidentally saved Windows HDR setting and recovers capture after an HDR color transition. The H.264 stream remains SDR; physical monitors' HDR preferences are not changed.
+
 This project is not affiliated with Apple or any commercial display product. iPad is a trademark of Apple Inc.
 
 Development note: WinSideUSB was built by Veysel as a personal engineering project with ChatGPT used as an AI pair-programming and research assistant for debugging, profiling, documentation, and iterative implementation work.
@@ -131,7 +133,7 @@ Maintainers build a setup with:
 
 ```powershell
 .\scripts\Get-SignedDisplayDriver.ps1
-.\scripts\Build-Setup.ps1 -Version "0.3.8" -DriverMode Signed `
+.\scripts\Build-Setup.ps1 -Version "0.3.9" -DriverMode Signed `
   -VcRedistPath "C:\Path\To\VC_redist.x64.exe"
 ```
 

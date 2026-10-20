@@ -11,6 +11,7 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include "DisplayColor.h"
 
 #pragma comment(lib, "setupapi.lib")
 #pragma comment(lib, "user32.lib")
@@ -392,6 +393,26 @@ inline bool FindManagedDisplayTarget(const std::wstring& instanceId,
     return true;
 }
 
+inline bool EnsureManagedDisplaySdr(const std::wstring& instanceId, bool& changed,
+    std::wstring& error, const std::atomic<bool>* cancel = nullptr) {
+    changed = false;
+    if (display_detail::Cancelled(cancel)) { error = L"Display activation was cancelled."; return false; }
+    ManagedDisplayTarget target;
+    // Resolve the owned ROOT\MTTVDD instance again, never a display number or
+    // friendly name. This must not affect another monitor's HDR preference.
+    if (!FindManagedDisplayTarget(instanceId, target, error)) return false;
+    if (!(target.path.flags & DISPLAYCONFIG_PATH_ACTIVE)) {
+        error = L"The managed virtual display is not active yet."; return false;
+    }
+    const LONG code = display_color_detail::EnsureSdr(target.path, changed, cancel);
+    if (code != ERROR_SUCCESS) {
+        error = display_detail::ErrorCode(L"Restore the iPad virtual display to SDR", code);
+        return false;
+    }
+    error.clear();
+    return true;
+}
+
 inline bool ValidatePhysicalDisplayState(const DisplayStateSnapshot& original,
     const std::wstring& managedInstance, std::wstring& error) {
     DisplayStateSnapshot current;
@@ -496,8 +517,22 @@ inline bool ConfigureManagedDisplay(int width, int height, int fps, const std::w
         std::wstring pending;
         DEVMODEW actual{}; actual.dmSize = sizeof(actual);
         DisplayStateSnapshot activeState;
-        if (FindManagedDisplayTarget(managedInstance, active, pending) &&
-            (active.path.flags & DISPLAYCONFIG_PATH_ACTIVE) != 0 &&
+        const bool foundActive = FindManagedDisplayTarget(managedInstance, active, pending) &&
+            (active.path.flags & DISPLAYCONFIG_PATH_ACTIVE) != 0;
+        // HDR can change the source pixel format, so restore SDR before testing
+        // the expected 32-bit mode, not after that test has already failed.
+        if (foundActive) {
+            bool colorChanged = false;
+            if (!EnsureManagedDisplaySdr(managedInstance, colorChanged, error, cancel)) return false;
+            if (colorChanged) {
+                code = SetDisplayConfig(static_cast<UINT32>(planned.paths.size()), planned.paths.data(),
+                    static_cast<UINT32>(planned.modes.size()), planned.modes.data(), configFlags | SDC_APPLY);
+                if (code != ERROR_SUCCESS) { error = display_detail::ErrorCode(L"Restore exact virtual display mode after HDR", code); return false; }
+                Sleep(100);
+                continue;
+            }
+        }
+        if (foundActive &&
             display_detail::QueryPaths(QDC_ONLY_ACTIVE_PATHS, activeState, pending) &&
             std::any_of(activeState.paths.begin(), activeState.paths.end(), [&](const DISPLAYCONFIG_PATH_INFO& path) {
                 return display_detail::SamePathIdentity(path, active.path) &&

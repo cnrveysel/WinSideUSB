@@ -546,6 +546,20 @@ static bool ConnectVirtualDisplay(int w, int h, int fps) {
     return !g_stop.load();
 }
 
+static bool RestoreCaptureSdr() {
+    if (!winsideusb::HasSignedDisplayConfiguration()) return true;
+    std::wstring instance, error;
+    bool changed = false;
+    if (!winsideusb::ReadDisplaySetting(L"ManagedDeviceInstanceId", instance) ||
+        !winsideusb::EnsureManagedDisplaySdr(instance, changed, error, &g_stop)) {
+        DiagLog("iPad SDR recovery failed");
+        if (!g_stop.load()) SetStreamError(L"Windows could not turn HDR off for the iPad display. View logs for details.");
+        return false;
+    }
+    if (changed) DiagLog("iPad HDR/Advanced Color disabled; SDR capture restored");
+    return true;
+}
+
 struct StreamLogStats {
     std::ofstream file;
     LARGE_INTEGER freq{};
@@ -2219,6 +2233,7 @@ static void StreamThread() {
         const LONGLONG idleHeartbeatIntervalCounts = qpfFreq.QuadPart / IDLE_HEARTBEAT_FPS;
         bool haveLastNativeFrame = false;
         bool previousFrameLargeDirty = false;
+        int colorRecoveryAttempts = 0;
         auto advanceNextFrame = [&](const LARGE_INTEGER& now) {
             if (now.QuadPart - nextFrameQPC.QuadPart > activeFrameIntervalCounts * 2) {
                 nextFrameQPC = now;
@@ -2255,6 +2270,7 @@ static void StreamThread() {
                 break;
             if (!dupl) {
                 LARGE_INTEGER retryQPC{};
+                if (!RestoreCaptureSdr()) break;
                 HRESULT dupHr = output1->DuplicateOutput(dev, &dupl);
                 if (FAILED(dupHr) || !dupl) {
                     PostStatus(SS_PAUSED);
@@ -2417,13 +2433,28 @@ static void StreamThread() {
             D3D11_TEXTURE2D_DESC capturedTexture{};
             tex->GetDesc(&capturedTexture);
             if (!winsideusb::IsExactCaptureTexture(capturedTexture, W, H)) {
-                SetStreamError(L"Windows changed the captured display size. Reconnect to apply your selected mode.");
+                const bool colorTransition = capturedTexture.Width == static_cast<UINT>(W) &&
+                    capturedTexture.Height == static_cast<UINT>(H) &&
+                    (capturedTexture.Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
+                        capturedTexture.Format == DXGI_FORMAT_R10G10B10A2_UNORM);
                 tex->Release();
                 if (res) res->Release();
                 dupl->ReleaseFrame(); duplicationFrameOwned = false;
                 if (inSample) inSample->Release();
+                if (colorTransition && colorRecoveryAttempts++ < 5) {
+                    DiagLog("HDR capture surface detected; recreating SDR duplication");
+                    dupl->Release(); dupl = nullptr;
+                    haveLastNativeFrame = false;
+                    desktopCursor.ResetPointer();
+                    Sleep(100);
+                    continue;
+                }
+                SetStreamError(colorTransition ?
+                    L"Windows could not restore SDR capture. Turn HDR off for the iPad virtual display and reconnect." :
+                    L"Windows changed the captured display size. Reconnect to apply your selected mode.");
                 break;
             }
+            colorRecoveryAttempts = 0;
 
             {
                 winsideusb::ScopedStageTimer timing(&streamLog.copySubmitTiming, qpfFreq.QuadPart);
