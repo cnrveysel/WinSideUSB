@@ -45,7 +45,7 @@ Paket `artifacts/WinSideUSBClient-recovery.ipa` dosyasına kopyalanır. `artifac
 USB bağlı, iPad'in kilidi açık ve bilgisayara güvenilmişken, bu bilgisayarda kullanılan iPad'e hazırlanan paketi yükleme komutu:
 
 ```powershell
-wsl.exe -d Ubuntu-24.04 --user veysel -- bash -lc 'env -u USBMUXD_SOCKET_ADDRESS xtool install --usb --udid 00008112-001505042608C01E /mnt/c/Users/Veysel/Desktop/WinSideUSB/iPadClient/artifacts/WinSideUSBClient-recovery.ipa'
+wsl.exe -d Ubuntu-24.04 --user <linux-user> -- bash -lc 'env -u USBMUXD_SOCKET_ADDRESS xtool install --usb --udid <ipad-udid> /mnt/c/path/to/WinSideUSB/iPadClient/artifacts/WinSideUSBClient-recovery.ipa'
 ```
 
 WSL'in iPad'e erişebilmesi için cihazın USB paylaşımı açık olmalıdır. `usbipd list` içindeki Apple cihazının güncel BUSID değerini kullanın; 27 Ekim kontrolünde bu değer `2-6` idi. Paylaşımı ilk kez açan `usbipd bind --busid 2-6` komutu **yönetici PowerShell** gerektirir. Ardından normal PowerShell'de `usbipd attach --wsl --busid 2-6` çalıştırıp yukarıdaki yükleme komutunu kullanın. `USBMUXD_SOCKET_ADDRESS` değişkenini komutta kaldırmak, eski Windows yönlendirmesi yerine WSL'in yerel usbmuxd bağlantısının kullanılmasını sağlar. Kurulumdan sonra `usbipd detach --busid 2-6` ile cihazı Windows'a geri bırakın; Windows yayını için cihazın WSL'e bağlı kalmaması gerekir.

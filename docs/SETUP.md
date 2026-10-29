@@ -42,7 +42,7 @@ For the normal ready-signed setup, build `WinSideUSB.sln` Release x64 (including
 
 ```powershell
 .\scripts\Get-SignedDisplayDriver.ps1
-.\scripts\Build-Setup.ps1 -Version "0.3.9" -DriverMode Signed `
+.\scripts\Build-Setup.ps1 -Version "0.3.10" -DriverMode Signed `
   -DriverPackageDir ".\.codex\vendor\VirtualDisplayDriver" `
   -ServicePath ".\x64\Release\WinSideUSBDisplayService.exe" `
   -VcRedistPath "C:\Path\To\VC_redist.x64.exe"

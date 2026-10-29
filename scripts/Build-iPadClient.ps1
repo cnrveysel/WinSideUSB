@@ -33,6 +33,8 @@ fi
 '@
 $signFlag = if ($Sign) { '1' } else { '0' }
 $ipaFlag = if ($Ipa) { '1' } else { '0' }
+# PowerShell here-strings inherit CRLF from the checkout; bash requires LF.
+$build = $build.Replace("`r`n", "`n")
 & wsl.exe -d $Distribution --user $User --exec bash -lc $build ipad-build $linuxSource.Trim() $LinuxProjectPath $signFlag $ipaFlag
 if ($LASTEXITCODE -ne 0) { throw "iPad release build failed (exit $LASTEXITCODE)." }
 if ($Ipa) {

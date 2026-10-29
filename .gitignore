@@ -82,3 +82,25 @@ DerivedData/
 .swiftpm/
 *.xcuserstate
 xcuserdata/
+
+# Python test/cache output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.mobileprovision
+*.provisionprofile
+
+# iPad distribution and local build tools
+*.ipa
+*.dSYM/
+*.xcarchive/
+.sourcekit-lsp/
+.bsp/

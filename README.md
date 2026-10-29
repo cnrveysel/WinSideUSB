@@ -6,6 +6,12 @@ It creates a Windows virtual display with an Indirect Display Driver (IDD), capt
 
 The primary tested target is an iPad Pro 12.9-inch M2-class display at `2732x2048` and up to `120 Hz`.
 
+## Download
+
+The latest pre-audio baseline is **Windows 0.3.10 / iPad 1.1 (5)**. Download the Windows installer and SHA-256 checksum from [the 0.3.10 release](https://github.com/cnrveysel/WinSideUSB/releases/tag/v0.3.10). GitHub's **Code → Download ZIP** contains source code; the installer is under release **Assets**.
+
+This version includes the latest display profiles, USB reconnect handling and 120 Hz diagnostics from the saved video-only baseline. See [release notes and validation limits](docs/RELEASE_0.3.10.md). The iPad client source is included in both the repository and Windows setup; an iPad app build needs your own Apple signing.
+
 ## Status
 
 This is a personal research project. It is not production-ready commercial display software yet.
@@ -133,7 +139,7 @@ Maintainers build a setup with:
 
 ```powershell
 .\scripts\Get-SignedDisplayDriver.ps1
-.\scripts\Build-Setup.ps1 -Version "0.3.9" -DriverMode Signed `
+.\scripts\Build-Setup.ps1 -Version "0.3.10" -DriverMode Signed `
   -VcRedistPath "C:\Path\To\VC_redist.x64.exe"
 ```
 
