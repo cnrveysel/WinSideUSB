@@ -27,6 +27,7 @@
 - `scripts/Get-SignedDisplayDriver.ps1`
 - `WinSideUSBDisplayService/`, signed display client/output/protocol/service sources, and `tests/`
 - `scripts/Setup-Driver.ps1`, `scripts/Setup-DriverSupport.psm1`, and `scripts/Setup-Prerequisites.ps1`
+- `scripts/Setup-PrerequisitesSupport.psm1` and the reviewed `scripts/AppleUsbPrerequisite.json`
 - `installer/WinSideUSB.iss`
 - `Install-WinSideUSBDevPreview.cmd`
 - `.gitignore`
@@ -76,7 +77,7 @@ The original `IddSampleDriver.sln` and manual test-driver install remain a separ
 - Signed mode produces `WinSideUSB-<version>-Setup.exe` with a trusted upstream driver; our app/setup may be unsigned. Optional Release mode requires trusted app/own-driver signatures and `-SigningCertificateThumbprint` to sign setup/uninstaller. Record actual signature status instead of implying our unsigned setup is signed.
 - Include project license texts, Microsoft sample notices, iPad Swift source, and the setup/driver/client documentation.
 - Complete the third-party binary/version/source inventory for every embedded DLL/tool. Generic GPL/LGPL texts alone do not complete the corresponding-source and attribution work.
-- Keep Apple installers/DLLs out of the payload unless a verified redistribution arrangement covers them. The current setup requires existing Apple USB support and links to official installation guidance.
+- Keep Apple installers/DLLs out of the payload. Setup downloads the reviewed original iTunes package directly from Apple when USB support is missing, requires its pinned hash and trusted Apple signature, and identifies acceptance of Apple's terms in the selected task. Review new versions and silent installer behavior before changing the pinned definition.
 - Keep source archives, checksums, and signature verification results with release build records. Keep private signing keys out of every artifact.
 
 ## Setup Verification Matrix
@@ -84,8 +85,9 @@ The original `IddSampleDriver.sln` and manual test-driver install remain a separ
 These are release gates to execute on test machines, not a record of completed tests:
 
 - [ ] Clean Windows 11 x64 installation without Visual Studio/WDK.
-- [ ] Missing Apple Mobile Device Service produces official installation guidance and a blocked prerequisite; a stopped service produces an actionable result.
-- [ ] Windows 11 N without Media Feature Pack is detected; official installation guidance and a restart resolve the prerequisite.
+- [ ] Missing Apple Mobile Device Service downloads and installs the original Apple package with progress/cancellation; a stopped/disabled service is prepared automatically. Unselected automatic prerequisites block completion clearly.
+- [ ] Corrupted download, untrusted/non-Apple signature, offline download, failed iTunes installation and a missing post-install service cannot produce a successful setup.
+- [ ] Windows 11 N without Media Feature Pack prepares the capability through Windows Update and requests a restart; unavailable capability or organizational policy failures remain actionable.
 - [ ] Absent/outdated Visual C++ runtime is installed; an existing newer shared runtime is preserved.
 - [ ] Development setup checks test-signing on and Secure Boot off; blocked prerequisites do not cause security-setting changes.
 - [ ] Default Signed setup installs and streams with Secure Boot on and test-signing off.

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version = '0.3.10',
+    [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version = '0.3.11',
     [ValidateSet('Signed', 'Release', 'Development')][string]$DriverMode = 'Signed',
     [string]$AppPath,
     [string]$ServicePath,
@@ -15,6 +15,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+Import-Module (Join-Path $PSScriptRoot 'Setup-PrerequisitesSupport.psm1') -Force
+$applePrerequisite = Get-SetupAppleUsbDefinition
 if (-not $AppPath) { $AppPath = Join-Path $repoRoot 'x64\Release\WinSideUSB.exe' }
 if (-not $DriverPackageDir) {
     $DriverPackageDir = if ($DriverMode -eq 'Signed') { Join-Path $repoRoot '.codex\vendor\VirtualDisplayDriver' } else { Join-Path $repoRoot 'x64\Release\IddSampleDriver' }
@@ -141,7 +143,7 @@ foreach ($name in $driverFiles) {
 if ($DriverMode -eq 'Development') {
     Copy-Item -LiteralPath $CertificatePath -Destination (Join-Path $payloadDir 'driver\IddSampleDriver.cer')
 }
-foreach ($name in @('Setup-Driver.ps1', 'Setup-DriverSupport.psm1', 'Setup-Prerequisites.ps1')) {
+foreach ($name in @('Setup-Driver.ps1', 'Setup-DriverSupport.psm1', 'Setup-Prerequisites.ps1', 'Setup-PrerequisitesSupport.psm1', 'AppleUsbPrerequisite.json')) {
     Copy-Item -LiteralPath (Resolve-File (Join-Path $PSScriptRoot $name)) -Destination (Join-Path $payloadDir 'scripts')
 }
 foreach ($name in @('LICENSE', 'NOTICE.md')) {
@@ -165,6 +167,7 @@ $null = Test-SetupPackage -PackageDir (Join-Path $payloadDir 'driver') -DriverMo
 $manifest = [ordered]@{
     Version = $Version; DriverMode = $DriverMode; Architecture = 'x64'; MinimumWindowsBuild = 22000
     RuntimeVersion = $runtimeVersion.ToString(); CreatedUtc = [DateTime]::UtcNow.ToString('o')
+    AppleUsbPrerequisite = [ordered]@{ Version = $applePrerequisite.Version; Url = $applePrerequisite.Url; SHA256 = $applePrerequisite.SHA256; DownloadedOnlyIfMissing = $true }
     Files = @(Get-ChildItem -LiteralPath $payloadDir -File -Recurse | ForEach-Object {
         [ordered]@{ Path = $_.FullName.Substring($payloadDir.Length + 1); SHA256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
     })
@@ -176,6 +179,8 @@ if ($DriverMode -eq 'Signed') {
 }
 $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $payloadDir 'payload-manifest.json') -Encoding UTF8
 $compilerArgs = @('/Qp', "/DPayloadDir=$payloadDir", "/DOutputDir=$outputRoot", "/DAppVersion=$Version", "/DDriverMode=$DriverMode", "/DRuntimeVersion=$runtimeVersion")
+$compilerArgs += "/DAppleInstallerUrl=$($applePrerequisite.Url)"
+$compilerArgs += "/DAppleInstallerSHA256=$($applePrerequisite.SHA256)"
 if ($SigningCertificateThumbprint) {
     # Inno replaces $f with its target filename. No password/private key in arguments.
     $signCommand = '"' + $SignToolPath + '" sign /sha1 ' + $SigningCertificateThumbprint + ' /s My /fd SHA256 /tr https://timestamp.digicert.com /td SHA256 $f'

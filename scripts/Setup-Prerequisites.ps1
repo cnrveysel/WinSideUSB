@@ -1,8 +1,10 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Check', 'Prepare', 'CloseApp')][string]$Action = 'Check',
+    [ValidateSet('Check', 'CheckApple', 'Prepare', 'CloseApp')][string]$Action = 'Check',
     [Parameter(Mandatory = $true)][string]$ResultPath,
-    [string]$AppPath
+    [string]$AppPath,
+    [string]$AppleInstallerPath,
+    [switch]$InstallMissingMedia
 )
 
 # Called by the elevated setup; shared Apple/VC components are never uninstalled.
@@ -10,6 +12,7 @@ $ErrorActionPreference = 'Stop'
 # A setup started from PowerShell 7 can pass its module search path to 5.1.
 # Prefer the running engine's built-in modules over inherited module locations.
 $env:PSModulePath = (Join-Path $PSHOME 'Modules') + [IO.Path]::PathSeparator + $env:PSModulePath
+Import-Module (Join-Path $PSScriptRoot 'Setup-PrerequisitesSupport.psm1') -Force
 $exitCode = 0
 try {
     if ($Action -in @('Prepare', 'CloseApp') -and $AppPath) {
@@ -56,26 +59,19 @@ namespace WinSideUSB {
     if ($Action -eq 'CloseApp') {
         $message = 'The installed WinSideUSB application is closed.'
     }
-    else {
-    if (-not (Test-Path -LiteralPath (Join-Path $env:windir 'System32\MFPlat.dll') -PathType Leaf)) {
-        throw 'Windows Media Foundation is missing. On Windows N, install the Media Feature Pack in Settings > Apps > Optional features, then restart and run setup again.'
-    }
-    $service = Get-Service -Name 'Apple Mobile Device Service' -ErrorAction SilentlyContinue
-    if (-not $service) {
-        throw 'Apple USB support is missing. Install Apple Devices or iTunes from Apple, then run this setup again. https://support.apple.com/118290'
-    }
-    $serviceInfo = Get-CimInstance Win32_Service -Filter "Name='Apple Mobile Device Service'"
-    $binary = [Environment]::ExpandEnvironmentVariables($serviceInfo.PathName)
-    if ($binary -match '^"([^"]+)"') { $binary = $Matches[1] }
-    elseif ($binary -match '^(.+?\.exe)(?:\s|$)') { $binary = $Matches[1] }
-    if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
-        throw 'Apple USB support is damaged. Repair Apple Devices or iTunes, then run setup again.'
-    }
-    if ($Action -eq 'Prepare') {
-        if ($service.Status -ne 'Running') { Start-Service -Name $service.Name }
-        (Get-Service -Name $service.Name).WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
-    }
-    $message = 'Apple USB support is available.'
+    elseif ($Action -eq 'Prepare') {
+        $directory = Split-Path -Parent ([IO.Path]::GetFullPath($ResultPath))
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        $state = Initialize-SetupPrerequisites -AppleInstallerPath $AppleInstallerPath -InstallMissingMedia:$InstallMissingMedia -LogDirectory $directory
+        $exitCode = if ($state.RestartRequired) { 3010 } else { 0 }
+        $message = if ($state.RestartRequired) { 'Windows components are installed. Restart Windows before opening WinSideUSB.' } else { 'Windows and Apple USB components are ready.' }
+    } else {
+        if ($Action -eq 'Check' -and -not (Test-SetupMediaFoundation)) {
+            throw 'Windows media components are missing. Setup can install the Media Feature Pack on Windows N.'
+        }
+        $apple = Get-SetupAppleUsbState
+        if (-not $apple.Ready) { throw $apple.Message }
+        $message = $apple.Message
     }
 }
 catch {

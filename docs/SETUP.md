@@ -6,15 +6,17 @@ The default **Signed** mode uses the unchanged trusted-signed Virtual Display Dr
 
 ## Install On Windows
 
-1. Use **Windows 11 x64**, build 22000 or later, the supported target for this setup and its display service. Windows on ARM and S mode are not supported by this integration. On **Windows 11 N**, install Microsoft's [Media Feature Pack](https://support.microsoft.com/en-us/windows/experience/platform-variants/media-feature-pack-for-windows-n) and restart first. Setup checks for `MFPlat.dll`, which the app requires to launch.
-2. Ensure **Apple Mobile Device Service** and Apple's USB device support are installed. Setup checks this prerequisite before installing WinSideUSB. If it is missing, follow setup's link to Apple's official [Apple Devices / iTunes installation guidance](https://support.apple.com/en-us/118290), install the Apple software, and run setup again.
+1. Use **Windows 11 x64**, build 22000 or later. Windows on ARM and S mode are not supported by this integration.
+2. Run setup and leave its prerequisite options enabled. If Apple USB support is absent, setup downloads Apple's official iTunes package (about 200 MB) with progress/cancellation, verifies the pinned hash and Apple signature, then installs it. The task explicitly accepts Apple's terms, linked in setup. An existing usable Apple installation is reused. On Windows N, missing media components are installed through Windows Update. These downloads need internet access; an already prepared PC does not need them.
 3. For a **Development** setup, prepare Windows for the test-signed driver first: test-signing must already be enabled and Secure Boot disabled. See [DRIVER.md](DRIVER.md#test-signed-development-install). Setup checks these settings and leaves them under your control.
-4. Double-click the downloaded setup EXE, accept the administrator prompt, choose the installation options, and install. Setup installs the bundled Visual C++ runtime when needed, installs the virtual display driver, and copies the app. It creates an all-users Start menu shortcut and an optional desktop shortcut.
-5. Complete any requested restart, open the iPad client and run the Windows app. The managed display stays disabled until the USB client handshake succeeds. Stop, USB loss or app exit releases it. Pixel/Hz choices retain the existing iPad modes.
+4. Accept the administrator prompt and finish setup. It installs the bundled Visual C++ runtime when needed, the virtual display driver, service and app, with Start menu and desktop shortcuts. No terminal commands or manual DLL/driver copies are required.
+5. Complete any requested restart. Otherwise the default finish action opens WinSideUSB immediately. With an iPad client open, connect USB and trust the PC on the iPad if asked. The managed display stays disabled until the USB handshake succeeds. Stop, USB loss or app exit releases it. Pixel/Hz choices retain the existing modes.
 
 Download a built setup from the project's release artifacts. GitHub's **Code → Download ZIP** downloads source code and cannot be used as an installer.
 
-Apple's USB software is a separate prerequisite. `iproxy.exe` and `usbmuxd.dll` bundled inside WinSideUSB are client tools; they depend on a working usbmux service. The [libusbmuxd project](https://github.com/libimobiledevice/libusbmuxd#prerequisites) documents Apple Mobile Device Support as the Windows provider. Setup does not redistribute Apple's installer or replace it with copied Apple DLLs. If the service exists but does not start, use Apple's [AMDS troubleshooting instructions](https://support.apple.com/en-us/102347).
+`iproxy.exe` and `usbmuxd.dll` are client tools that depend on a working Apple usbmux service. The [libusbmuxd project](https://github.com/libimobiledevice/libusbmuxd#prerequisites) documents Apple Mobile Device Support as the Windows provider. Setup now handles acquiring that prerequisite from Apple; Apple's installer is downloaded during installation and is not redistributed inside our EXE. The exact URL, version and SHA-256 are reviewed in `scripts/AppleUsbPrerequisite.json`. A valid Apple publisher signature is also required before execution. Setup starts an installed stopped service, restores automatic startup if it was disabled, and preserves shared Apple software during WinSideUSB uninstall.
+
+Windows N media installation uses Microsoft's [Add-WindowsCapability](https://learn.microsoft.com/en-us/powershell/module/dism/add-windowscapability) and requests a restart, as required by the [Media Feature Pack](https://support.microsoft.com/en-us/windows/experience/platform-variants/media-feature-pack-for-windows-n). Setup does not bypass Windows Update or organizational policy. An unavailable download, invalid signature, failed prerequisite or missing post-install service blocks completion with a retryable error. A genuine pending restart disables the finish-page launch action.
 
 WinSideUSB setup does not install the iPad application. Use the included `swiftclientcode.swift` with Swift Playgrounds or a native iOS app target, on iPadOS 17 or later. See [IPAD_CLIENT.md](IPAD_CLIENT.md).
 
@@ -22,11 +24,11 @@ WinSideUSB setup does not install the iPad application. Use the included `swiftc
 
 | Mode | Output name | Driver requirement |
 | --- | --- | --- |
-| Signed (default) | `WinSideUSB-0.3.9-Setup.exe` | Original pinned MttVDD INF/DLL/CAT, trusted vendor signatures and catalog contents; native display service; no test-signing requirement |
+| Signed (default) | `WinSideUSB-0.3.11-Setup.exe` | Original pinned MttVDD INF/DLL/CAT, trusted vendor signatures and catalog contents; native display service; no test-signing requirement |
 | Development | `WinSideUSB-0.2.0-Development-Setup.exe` | Test-signed package, matching test certificate, test-signing already on, Secure Boot off |
 | Release | `WinSideUSB-0.2.0-Setup.exe` | Trusted app/DLL/CAT signatures and signed setup/uninstaller; clean-PC validation with Secure Boot on and test-signing off |
 
-The default version is `0.3.9` and mode is **Signed**. Signed verifies the original vendor files and trusted DLL/CAT signatures; it never imports a development certificate or changes Windows security settings. Signing our app/setup is optional in this mode. The optional **Release** mode retains trusted app/own-driver signatures and requires `-SigningCertificateThumbprint` to sign setup and its uninstaller. **Development** remains explicit and separately labeled.
+The default version is `0.3.11` and mode is **Signed**. Signed verifies the original vendor files and trusted DLL/CAT signatures; it never imports a development certificate or changes Windows security settings. Signing our app/setup is optional in this mode. The optional **Release** mode retains trusted app/own-driver signatures and requires `-SigningCertificateThumbprint` to sign setup and its uninstaller. **Development** remains explicit and separately labeled.
 
 Development app/setup executables may be unsigned. Only the public test certificate is included in a Development payload; private signing keys are never included.
 
@@ -42,7 +44,7 @@ For the normal ready-signed setup, build `WinSideUSB.sln` Release x64 (including
 
 ```powershell
 .\scripts\Get-SignedDisplayDriver.ps1
-.\scripts\Build-Setup.ps1 -Version "0.3.10" -DriverMode Signed `
+.\scripts\Build-Setup.ps1 -Version "0.3.11" -DriverMode Signed `
   -DriverPackageDir ".\.codex\vendor\VirtualDisplayDriver" `
   -ServicePath ".\x64\Release\WinSideUSBDisplayService.exe" `
   -VcRedistPath "C:\Path\To\VC_redist.x64.exe"
@@ -82,7 +84,7 @@ Additional build parameters:
 
 | Parameter | Purpose |
 | --- | --- |
-| `Version` | Package version; default `0.3.9` |
+| `Version` | Package version; default `0.3.11` |
 | `DriverMode` | `Signed` (default), `Release` or `Development` |
 | `ServicePath` | Built native display-service EXE; required for Signed mode |
 | `AppPath` | Built Windows app |

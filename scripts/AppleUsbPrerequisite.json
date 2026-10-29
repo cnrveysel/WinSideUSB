@@ -1,0 +1,8 @@
+{
+  "Version": "12.13.12.3",
+  "Url": "https://secure-appldnld.apple.com/itunes12/142-28289-20261026-6acff6c8-72eb-4045-84eb-fd35239ac645/iTunes64Setup.exe",
+  "SHA256": "221A24203F6182B7DC0E18055B1E9338A0C3C992C7FEFE6B3BE0460CAF29DB4D",
+  "ManifestSource": "https://github.com/microsoft/winget-pkgs/blob/master/manifests/a/Apple/iTunes/12.13.12.3/Apple.iTunes.installer.yaml",
+  "SupportUrl": "https://support.apple.com/118290",
+  "LicenseUrl": "https://www.apple.com/legal/sla/"
+}

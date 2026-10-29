@@ -2,8 +2,14 @@
 #ifndef PayloadDir
   #error PayloadDir must be supplied by Build-Setup.ps1
 #endif
+#ifndef AppleInstallerUrl
+  #error AppleInstallerUrl must be supplied by Build-Setup.ps1
+#endif
+#ifndef AppleInstallerSHA256
+  #error AppleInstallerSHA256 must be supplied by Build-Setup.ps1
+#endif
 #ifndef AppVersion
-  #define AppVersion "0.3.10"
+  #define AppVersion "0.3.11"
 #endif
 #ifndef DriverMode
   #define DriverMode "Signed"
@@ -58,13 +64,25 @@ Name: english; MessagesFile: compiler:Default.isl
 
 [CustomMessages]
 turkish.WelcomeLabel1=WinSideUSB'ye hoş geldiniz
-turkish.WelcomeLabel2=iPad'inizi Windows'un ikinci ekranına dönüştürün.%n%nKurulum uygulamayı, sanal ekran sürücüsünü ve gerekli Windows bileşenlerini hazırlar.%n%nApple Devices veya iTunes bilgisayarınızda kurulu olmalıdır. iPad uygulamasını ayrıca açmanız gerekir.
+turkish.WelcomeLabel2=iPad'inizi Windows'un ikinci ekranına dönüştürün.%n%nKurulum uygulamayı, sanal ekran sürücüsünü ve gerekli Windows bileşenlerini hazırlar.%n%nApple USB desteği eksikse Apple'ın iTunes paketi indirilip kurulur (yaklaşık 200 MB). Windows N'de eksik medya bileşenleri de indirilir. Gerekli indirmeler için internet bağlantısı gerekir. iPad uygulamasını ayrıca açın.
 english.WelcomeLabel1=Welcome to WinSideUSB
-english.WelcomeLabel2=Turn your iPad into a second Windows display.%n%nSetup installs the app, virtual display driver, and Windows runtime.%n%nApple Devices or iTunes must already be installed. Open the iPad app separately.
+english.WelcomeLabel2=Turn your iPad into a second Windows display.%n%nSetup installs the app, virtual display driver, and Windows components.%n%nIf Apple USB support is missing, setup downloads and installs Apple's iTunes package (about 200 MB). Missing Windows N media components are also downloaded. These downloads require internet access. Open the iPad app separately.
 turkish.DevelopmentNotice=Bu bir geliştirme sürümüdür. Test imzalı sürücü için Windows test-signing açık ve Secure Boot kapalı olmalıdır. Kurulum bu ayarları değiştirmez.
 english.DevelopmentNotice=This is a development preview. Its test-signed driver requires Windows test-signing on and Secure Boot off. Setup does not change these settings.
-turkish.AppleButton=Apple USB desteğini edin
-english.AppleButton=Get Apple USB support
+turkish.AppleButton=Apple lisans koşulları
+english.AppleButton=Apple license terms
+turkish.AppleUsbTask=Gerekirse Apple USB desteğini iTunes ile kur (Apple koşullarını kabul ediyorum)
+english.AppleUsbTask=Install missing Apple USB support using iTunes (I accept Apple's terms)
+turkish.MediaTask=Windows N'de eksik medya bileşenlerini hazırla
+english.MediaTask=Prepare missing media components on Windows N
+turkish.AppleDownloadTitle=Apple USB desteği indiriliyor
+english.AppleDownloadTitle=Downloading Apple USB support
+turkish.AppleDownloadDescription=Apple'ın resmi iTunes paketi indiriliyor. USB desteği zaten kuruluysa bu indirme yapılmaz.
+english.AppleDownloadDescription=Downloading Apple's official iTunes package. This download is skipped when USB support is already installed.
+turkish.AppleRequired=Apple USB desteği eksik. Geri dönüp Apple USB desteği seçeneğini etkinleştirin; kurulum bunu sizin için hazırlasın.
+english.AppleRequired=Apple USB support is missing. Go back and enable the Apple USB support option so setup can prepare it for you.
+turkish.PrerequisiteProgress=Gerekli Windows ve Apple USB bileşenleri hazırlanıyor. Bu işlem birkaç dakika sürebilir...
+english.PrerequisiteProgress=Preparing Windows and Apple USB components. This can take several minutes...
 turkish.DesktopShortcut=Masaüstü kısayolu oluştur
 english.DesktopShortcut=Create a desktop shortcut
 turkish.LaunchApp=WinSideUSB'yi aç
@@ -83,13 +101,17 @@ turkish.FinishedLabel=Hazır. WinSideUSB'yi ve iPad uygulamasını açıp USB ka
 english.FinishedLabel=Ready. Open WinSideUSB and the iPad app, then connect USB. The second display opens when the client connects and closes when it disconnects.
 
 [Tasks]
-Name: desktopicon; Description: "{cm:DesktopShortcut}"; Flags: unchecked
+Name: desktopicon; Description: "{cm:DesktopShortcut}"
+Name: appleusb; Description: "{cm:AppleUsbTask}"
+Name: media; Description: "{cm:MediaTask}"
 
 [Files]
 ; Put prerequisites first so early extraction remains quick with solid compression.
 Source: "{#PayloadDir}\scripts\Setup-Driver.ps1"; DestDir: "{tmp}\driver-tools"; Flags: dontcopy
 Source: "{#PayloadDir}\scripts\Setup-DriverSupport.psm1"; DestDir: "{tmp}\driver-tools"; Flags: dontcopy
 Source: "{#PayloadDir}\scripts\Setup-Prerequisites.ps1"; DestDir: "{tmp}\driver-tools"; Flags: dontcopy
+Source: "{#PayloadDir}\scripts\Setup-PrerequisitesSupport.psm1"; DestDir: "{tmp}\driver-tools"; Flags: dontcopy
+Source: "{#PayloadDir}\scripts\AppleUsbPrerequisite.json"; DestDir: "{tmp}\driver-tools"; Flags: dontcopy
 #if DriverMode == "Signed"
 Source: "{#PayloadDir}\WinSideUSBDisplayService.exe"; DestDir: "{tmp}\driver-tools"; Flags: dontcopy
 #endif
@@ -121,6 +143,7 @@ Filename: "{app}\docs\iPad-Guide.html"; Description: "{cm:OpenIPadGuide}"; Flags
 var
   DriverInstalled, Finalized, Finished, HadState, RestartRequired: Boolean;
   AppleButton: TNewButton;
+  AppleDownloadPage: TDownloadWizardPage;
 
 function StatePath: String;
 begin
@@ -158,12 +181,20 @@ begin
 end;
 
 function RunPrerequisites(const Action, ResultPath: String): Integer;
+var
+  Params: String;
 begin
-  if not Exec(ExpandConstant('{sysnative}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
+  Params := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
     ExpandConstant('{tmp}\driver-tools\Setup-Prerequisites.ps1') +
     '" -Action ' + Action + ' -AppPath "' + ExpandConstant('{app}\WinSideUSB.exe') +
-    '" -ResultPath "' + ResultPath + '"', ExpandConstant('{tmp}\driver-tools'), SW_HIDE, ewWaitUntilTerminated, Result) then Result := -1;
+    '" -ResultPath "' + ResultPath + '"';
+  if Action = 'Prepare' then begin
+    if FileExists(ExpandConstant('{tmp}\AppleUSBSetup.exe')) then
+      Params := Params + ' -AppleInstallerPath "' + ExpandConstant('{tmp}\AppleUSBSetup.exe') + '"';
+    if WizardIsTaskSelected('media') then Params := Params + ' -InstallMissingMedia';
+  end;
+  if not Exec(ExpandConstant('{sysnative}\WindowsPowerShell\v1.0\powershell.exe'),
+    Params, ExpandConstant('{tmp}\driver-tools'), SW_HIDE, ewWaitUntilTerminated, Result) then Result := -1;
 end;
 
 function RuntimeNeeded: Boolean;
@@ -186,7 +217,7 @@ procedure OpenAppleSupport(Sender: TObject);
 var
   ErrorCode: Integer;
 begin
-  ShellExecAsOriginalUser('open', 'https://support.apple.com/118290', '', '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
+  ShellExecAsOriginalUser('open', 'https://www.apple.com/legal/sla/', '', '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
 end;
 
 procedure InitializeWizard;
@@ -201,6 +232,8 @@ begin
   AppleButton.SetBounds(ScaleX(16), WizardForm.CancelButton.Top, ScaleX(190), WizardForm.CancelButton.Height);
   AppleButton.Caption := CustomMessage('AppleButton');
   AppleButton.OnClick := @OpenAppleSupport;
+  AppleDownloadPage := CreateDownloadPage(CustomMessage('AppleDownloadTitle'), CustomMessage('AppleDownloadDescription'), nil);
+  AppleDownloadPage.ShowBaseNameInsteadOfUrl := True;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -219,11 +252,36 @@ begin
     exit;
   end;
   MessageFile := ExpandConstant('{tmp}\prerequisites.txt');
-  Code := RunPrerequisites('Prepare', MessageFile);
-  if Code <> 0 then begin
+  Code := RunPrerequisites('CheckApple', MessageFile);
+  if Code = 1 then begin
+    if not WizardIsTaskSelected('appleusb') then begin
+      Result := CustomMessage('AppleRequired');
+      exit;
+    end;
+    AppleDownloadPage.Clear;
+    AppleDownloadPage.Add('{#AppleInstallerUrl}', 'AppleUSBSetup.exe', '{#AppleInstallerSHA256}');
+    AppleDownloadPage.Show;
+    try
+      try
+        AppleDownloadPage.Download;
+      except
+        Result := GetExceptionMessage;
+      end;
+    finally
+      AppleDownloadPage.Hide;
+    end;
+    if Result <> '' then exit;
+  end else if Code <> 0 then begin
     Result := ReadMessage(MessageFile, CustomMessage('SetupFailed'));
     exit;
   end;
+  WizardForm.StatusLabel.Caption := CustomMessage('PrerequisiteProgress');
+  Code := RunPrerequisites('Prepare', MessageFile);
+  if (Code <> 0) and (Code <> 3010) then begin
+    Result := ReadMessage(MessageFile, CustomMessage('SetupFailed'));
+    exit;
+  end;
+  RestartRequired := RestartRequired or (Code = 3010);
   if RuntimeNeeded then begin
     WizardForm.StatusLabel.Caption := CustomMessage('RuntimeProgress');
     ExtractTemporaryFile('vc_redist.x64.exe');

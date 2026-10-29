@@ -78,6 +78,12 @@ The Microsoft Windows Driver Samples repository is licensed under the Microsoft 
 
 ## Release Packaging
 
+### Apple USB prerequisite acquisition
+
+Windows setup 0.3.11 can download Apple's unmodified x64 iTunes installer directly from `secure-appldnld.apple.com` if Apple USB support is missing. The prerequisite task identifies iTunes and acceptance of Apple's terms; setup links to [Apple's software license agreements](https://www.apple.com/legal/sla/). This installer is not embedded or redistributed in the WinSideUSB EXE. It is downloaded into the user's setup temporary directory, checked against a pinned SHA-256 and a trusted Apple publisher signature, and run with `/quiet /norestart`. Existing usable Apple USB support is reused; shared Apple software remains after WinSideUSB uninstall.
+
+The reviewed version, x64 URL and SHA-256 are in `scripts/AppleUsbPrerequisite.json`, sourced from [Microsoft's Apple.iTunes 12.13.12.3 manifest](https://github.com/microsoft/winget-pkgs/blob/master/manifests/a/Apple/iTunes/12.13.12.3/Apple.iTunes.installer.yaml). Updating that file requires reviewing a new official download, its exact hash, signature and installer behavior. Do not silently follow a moving latest-version URL in the released setup.
+
 If you publish a GitHub Release zip, include:
 
 - `WinSideUSB.exe`

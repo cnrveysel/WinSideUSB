@@ -36,7 +36,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           Import-Module Pester -MaximumVersion 4.99 -ErrorAction Stop
-          $result = Invoke-Pester -Script @('tests/Setup-Driver.Tests.ps1', 'tests/SignedSetup.Tests.ps1', 'tests/RegistrySetup.Tests.ps1') -PassThru
+          $result = Invoke-Pester -Script @('tests/Setup-Driver.Tests.ps1', 'tests/SignedSetup.Tests.ps1', 'tests/RegistrySetup.Tests.ps1', 'tests/Setup-Prerequisites.Tests.ps1') -PassThru
           if ($result.FailedCount -gt 0 -or $result.PassedCount -eq 0) { throw 'Setup transaction checks failed.' }
           # Native failure-path tests deliberately leave a nonzero LASTEXITCODE.
           # The Pester result above determines whether the suite passed.
@@ -58,3 +58,22 @@ jobs:
         run: python3 tests/run_ipad_transport_tests.py
       - name: Production logging and frame diagnostics checks
         run: python3 tests/run_ipad_performance_tests.py
+
+  apple-usb-install:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install and start real Apple USB support on a disposable runner
+        shell: powershell
+        run: .\tests\Invoke-AppleUsbInstallSmoke.ps1 -OutputDirectory "$env:RUNNER_TEMP\apple-usb-smoke"
+      - name: Preserve installer logs and readiness result
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: apple-usb-install
+          path: |
+            ${{ runner.temp }}/apple-usb-smoke/*.log
+            ${{ runner.temp }}/apple-usb-smoke/*.json
+          if-no-files-found: ignore
