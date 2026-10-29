@@ -16,7 +16,7 @@ jobs:
       run:
         shell: powershell
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Native display, cursor, pacing and USB checks
         run: |
           $ErrorActionPreference = 'Stop'
@@ -42,10 +42,15 @@ jobs:
         run: python -m unittest discover -s tests -p test_ipad_edid_size.py -v
 
   ipad-helpers:
-    runs-on: macos-14
+    runs-on: ubuntu-24.04
+    container: swift:6.0.3-jammy
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install Python test runner
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3
       - name: Production BSD transport checks
         run: python3 tests/run_ipad_transport_tests.py
       - name: Production logging and frame diagnostics checks
