@@ -38,6 +38,9 @@ jobs:
           Import-Module Pester -MaximumVersion 4.99 -ErrorAction Stop
           $result = Invoke-Pester -Script @('tests/Setup-Driver.Tests.ps1', 'tests/SignedSetup.Tests.ps1', 'tests/RegistrySetup.Tests.ps1') -PassThru
           if ($result.FailedCount -gt 0 -or $result.PassedCount -eq 0) { throw 'Setup transaction checks failed.' }
+          # Native failure-path tests deliberately leave a nonzero LASTEXITCODE.
+          # The Pester result above determines whether the suite passed.
+          exit 0
       - name: EDID configuration checks
         run: python -m unittest discover -s tests -p test_ipad_edid_size.py -v
 
