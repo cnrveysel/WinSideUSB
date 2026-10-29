@@ -22,16 +22,15 @@ $inputs = @([regex]::Matches($table.Groups[1].Value, '(?m)^\s*\{\s*"iPad[^"]+",.
 } | Select-Object -Unique)
 if ($inputs.Count -lt 10) { throw 'Too few distinct model definitions were tested.' }
 # Ask the actual C++ helper used by the UI, rather than duplicate its math here.
-$savedOutputEncoding = $OutputEncoding
-try {
-    # Hosted Windows PowerShell can otherwise prefix stdin with a UTF-8 BOM,
-    # which std::cin cannot parse as the first numeric width.
-    $OutputEncoding = New-Object Text.UTF8Encoding($false)
-    $actualModes = @($inputs | & $ModeProbePath --list-modes)
-} finally {
-    $OutputEncoding = $savedOutputEncoding
+# File redirection preserves exact ASCII bytes on Windows PowerShell 5.1 too.
+# Its native pipeline can otherwise depend on the hosted console's encoding.
+$probeInput = Join-Path $output 'mode-input.txt'
+[IO.File]::WriteAllText($probeInput, ($inputs -join "`n") + "`n", [Text.Encoding]::ASCII)
+$probeCommand = '"' + (Resolve-Path -LiteralPath $ModeProbePath).Path + '" --list-modes < "' + $probeInput + '"'
+$actualModes = @(& $env:ComSpec /d /s /c ('"' + $probeCommand + '"'))
+if ($LASTEXITCODE -ne 0 -or -not $actualModes.Count) {
+    throw "C++ display mode probe failed (exit $LASTEXITCODE, $($inputs.Count) inputs, $($actualModes.Count) outputs)."
 }
-if ($LASTEXITCODE -ne 0 -or -not $actualModes.Count) { throw 'C++ display mode probe failed.' }
 foreach ($mode in $actualModes) {
     if ($mode -notmatch '^(\d+),(\d+),(60|120)$') { throw "Invalid C++ mode probe line: $mode" }
     if ($sizes -notcontains "$($matches[1]),$($matches[2])") { throw "UI mode missing from packaged driver XML: $mode" }
