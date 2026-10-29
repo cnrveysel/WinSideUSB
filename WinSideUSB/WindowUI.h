@@ -7,7 +7,8 @@
 #pragma comment(linker, "\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 static const int WIN_W = 560;
-static const int WIN_H = 620;
+static const int WIN_H = 668;
+static const int UI_BTN_SCALING = 117;
 static const DWORD UI_WINDOW_STYLE = WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX;
 static UINT g_uiDpi = 96;
 
@@ -34,6 +35,7 @@ static StreamStatus g_uiStatus = SS_DISCONNECTED;
 static bool g_uiHasFrames = false;
 static bool g_uiStopping = false;
 static bool g_uiConnectionAttempted = false;
+static bool g_uiVisibleDetection = false;
 static int g_uiCardX = 32;
 static int g_uiCardW = WIN_W - 64;
 
@@ -127,18 +129,20 @@ static void LayoutUi(HWND hwnd) {
 
     MoveUiControl(hwnd, IDC_LABEL_IPAD, margin + 24, 298, 100, 20, g_fontSmall);
     MoveUiControl(hwnd, IDC_LBL_IPAD, margin + 24, 322, g_uiCardW - 48, 27, g_fontBody);
-    MoveUiControl(hwnd, IDC_LABEL_MODE, margin + 24, 369, 100, 20, g_fontSmall);
-    MoveUiControl(hwnd, IDC_COMBO_MODE, margin + 24, 394, g_uiCardW - 48, 180, g_fontBody);
+    MoveUiControl(hwnd, IDC_LABEL_MODE, margin + 24, 369, g_uiCardW - 48, 20, g_fontSmall);
+    MoveUiControl(hwnd, IDC_COMBO_MODE, margin + 24, 394, g_uiCardW - 48, 320, g_fontBody);
     HWND combo = GetDlgItem(hwnd, IDC_COMBO_MODE);
     SendMessageW(combo, CB_SETITEMHEIGHT, (WPARAM)-1, Dip(30));
     SendMessageW(combo, CB_SETITEMHEIGHT, 0, Dip(30));
-    SendMessageW(combo, CB_SETDROPPEDWIDTH, Dip(g_uiCardW - 48), 0);
+    SendMessageW(combo, CB_SETDROPPEDWIDTH, Dip((std::max)(480, g_uiCardW - 48)), 0);
+    SendMessageW(combo, CB_SETMINVISIBLE, 8, 0);
+    MoveUiControl(hwnd, UI_BTN_SCALING, margin + 20, 433, 168, 26, g_fontSmall);
 
-    MoveUiControl(hwnd, IDC_LABEL_ENCODER, margin + 4, 450, g_uiCardW - 140, 20, g_fontSmall);
-    MoveUiControl(hwnd, IDC_LBL_ENCODER, margin + 4, 475, g_uiCardW - 140, 24, g_fontBody);
-    MoveUiControl(hwnd, IDC_LABEL_FPS, width - margin - 104, 450, 100, 20, g_fontSmall);
-    MoveUiControl(hwnd, IDC_LBL_FPS, width - margin - 104, 475, 100, 26, g_fontMetric);
-    MoveUiControl(hwnd, IDC_HINT, margin + 4, 512, g_uiCardW - 8, 30, g_fontSmall);
+    MoveUiControl(hwnd, IDC_LABEL_ENCODER, margin + 4, 482, g_uiCardW - 140, 20, g_fontSmall);
+    MoveUiControl(hwnd, IDC_LBL_ENCODER, margin + 4, 507, g_uiCardW - 140, 24, g_fontBody);
+    MoveUiControl(hwnd, IDC_LABEL_FPS, width - margin - 104, 482, 100, 20, g_fontSmall);
+    MoveUiControl(hwnd, IDC_LBL_FPS, width - margin - 104, 507, 100, 26, g_fontMetric);
+    MoveUiControl(hwnd, IDC_HINT, margin + 4, 544, g_uiCardW - 8, 48, g_fontSmall);
     MoveUiControl(hwnd, IDC_BTN_ACTION, margin, height - 72, g_uiCardW, 42, g_fontButton);
     MoveUiControl(hwnd, IDC_BTN_LOGS, width / 2 - 64, height - 28, 128, 24, g_fontSmall);
 
@@ -157,6 +161,16 @@ static void SetUiStatus(HWND hwnd, const wchar_t* text, COLORREF color, const wc
     InvalidateRect(hwnd, &pill, FALSE);
 }
 
+static void UpdateModeHint(HWND hwnd) {
+    int selection = (int)SendDlgItemMessageW(hwnd, IDC_COMBO_MODE, CB_GETCURSEL, 0, 0);
+    if (selection < 0 || selection >= g_modeCount) return;
+    std::wstring hint = ModeHint(g_modes[selection]);
+    hint += g_streaming.load()
+        ? L" To change mode: Stop display, choose a mode, then Start display."
+        : L" Choose a mode, then Start display.";
+    SetWindowTextW(GetDlgItem(hwnd, IDC_HINT), hint.c_str());
+}
+
 static void UpdateUiControls(HWND hwnd) {
     bool streaming = g_streaming.load();
     bool detecting = g_detecting.load();
@@ -164,6 +178,7 @@ static void UpdateUiControls(HWND hwnd) {
     EnableWindow(GetDlgItem(hwnd, IDC_BTN_ACTION), streaming ? !g_uiStopping : ready);
     EnableWindow(GetDlgItem(hwnd, IDC_BTN_DETECT), !streaming && !detecting);
     EnableWindow(GetDlgItem(hwnd, IDC_COMBO_MODE), !streaming && ready);
+    EnableWindow(GetDlgItem(hwnd, UI_BTN_SCALING), g_detectFound && g_modeCount > 0);
     SetWindowTextW(GetDlgItem(hwnd, IDC_BTN_ACTION),
         g_uiStopping ? L"Stopping\u2026" : streaming ? L"Stop display" : L"Start display");
     SetWindowTextW(GetDlgItem(hwnd, IDC_BTN_DETECT), detecting ? L"Searching" : L"Refresh");
@@ -173,6 +188,7 @@ static void UpdateUiControls(HWND hwnd) {
 }
 
 static void OnDetectionStarted(HWND hwnd) {
+    g_uiVisibleDetection = true;
     SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_IPAD), L"Looking for your iPad\u2026");
     SetUiStatus(hwnd, L"Looking for iPad", UI_MUTED,
         L"Connect your iPad with a USB cable and unlock it.");
@@ -256,7 +272,7 @@ static void PaintWindowChrome(HWND hwnd, HDC dc) {
     Gdiplus::SolidBrush statusDot(GdiColor(g_statusColor));
     graphics.FillEllipse(&statusDot, center - 110, 244.0f, 6.0f, 6.0f);
 
-    FillUiRoundRect(graphics, (float)g_uiCardX, 278, (float)g_uiCardW, 156, 18, GdiColor(UI_PANEL));
+    FillUiRoundRect(graphics, (float)g_uiCardX, 278, (float)g_uiCardW, 188, 18, GdiColor(UI_PANEL));
     Gdiplus::Pen separator(GdiColor(UI_EDGE), 1);
     graphics.DrawLine(&separator, (float)g_uiCardX + 24, 359.0f,
         (float)g_uiCardX + g_uiCardW - 24, 359.0f);
@@ -292,11 +308,13 @@ static void DrawModernButton(const DRAWITEMSTRUCT* item) {
     bool pressed = (item->itemState & ODS_SELECTED) != 0;
     bool hover = GetPropW(item->hwndItem, L"WSUSBHover") != nullptr;
     bool action = item->CtlID == IDC_BTN_ACTION;
-    bool logs = item->CtlID == IDC_BTN_LOGS;
+    bool scaling = item->CtlID == UI_BTN_SCALING;
+    bool logs = item->CtlID == IDC_BTN_LOGS || scaling;
+    COLORREF surface = scaling ? UI_PANEL : UI_BG;
     bool stopping = g_streaming.load();
-    COLORREF fill = logs ? UI_BG : action ? (stopping ? RGB(254, 235, 235) : UI_ACCENT) : RGB(232, 232, 237);
+    COLORREF fill = logs ? surface : action ? (stopping ? RGB(254, 235, 235) : UI_ACCENT) : RGB(232, 232, 237);
     COLORREF text = logs ? UI_ACCENT : action ? (stopping ? UI_DANGER : RGB(255, 255, 255)) : UI_TEXT;
-    if (disabled) { fill = logs ? UI_BG : RGB(232, 232, 237); text = RGB(137, 137, 146); }
+    if (disabled) { fill = logs ? surface : RGB(232, 232, 237); text = RGB(137, 137, 146); }
     else if (pressed || hover) {
         fill = logs ? RGB(233, 240, 249) : action ?
             (stopping ? RGB(249, 215, 215) : pressed ? RGB(0, 85, 178) : RGB(0, 103, 211)) : RGB(222, 222, 228);
@@ -304,7 +322,7 @@ static void DrawModernButton(const DRAWITEMSTRUCT* item) {
 
     Gdiplus::Graphics graphics(item->hDC);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-    graphics.Clear(GdiColor(UI_BG));
+    graphics.Clear(GdiColor(surface));
     float scale = g_uiDpi / 96.0f;
     float inset = 2 * scale;
     FillUiRoundRect(graphics, bounds.left + inset, bounds.top + inset,
@@ -334,18 +352,26 @@ static void DrawComboItem(const DRAWITEMSTRUCT* item) {
     HBRUSH brush = CreateSolidBrush(selected && !closed ? RGB(233, 243, 255) : UI_PANEL);
     FillRect(item->hDC, &item->rcItem, brush);
     DeleteObject(brush);
-    wchar_t label[96]{};
+    std::wstring label = L"Connect an iPad to choose a mode";
     int index = (int)item->itemID;
     if (index < 0) index = (int)SendMessageW(item->hwndItem, CB_GETCURSEL, 0, 0);
-    if (index >= 0) SendMessageW(item->hwndItem, CB_GETLBTEXT, index, (LPARAM)label);
-    else wcscpy_s(label, L"Connect an iPad to choose a mode");
+    if (index >= 0) {
+        LRESULT length = SendMessageW(item->hwndItem, CB_GETLBTEXTLEN, index, 0);
+        if (length != CB_ERR && length >= 0) {
+            // CB_GETLBTEXT does not accept a buffer length. Size to the actual
+            // string so profile names and future mode labels cannot overflow.
+            label.resize((size_t)length + 1);
+            SendMessageW(item->hwndItem, CB_GETLBTEXT, index, (LPARAM)&label[0]);
+            label.resize((size_t)length);
+        }
+    }
     RECT textBounds = item->rcItem;
     textBounds.left += Dip(10);
     textBounds.right -= Dip(8);
     SetBkMode(item->hDC, TRANSPARENT);
     SetTextColor(item->hDC, disabled ? UI_MUTED : UI_TEXT);
     HGDIOBJ oldFont = SelectObject(item->hDC, g_fontBody);
-    DrawTextW(item->hDC, label, -1, &textBounds, DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    DrawTextW(item->hDC, label.c_str(), -1, &textBounds, DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     SelectObject(item->hDC, oldFont);
     if ((item->itemState & ODS_FOCUS) && !closed) DrawFocusRect(item->hDC, &item->rcItem);
 }
@@ -367,6 +393,11 @@ static void OpenDiagnostics(HWND hwnd) {
         MessageBoxW(hwnd, L"The log folder could not be opened.", L"WinSideUSB", MB_OK | MB_ICONINFORMATION);
 }
 
+static void OpenWindowsScaling(HWND hwnd) {
+    if ((INT_PTR)ShellExecuteW(hwnd, L"open", L"ms-settings:display", nullptr, nullptr, SW_SHOWNORMAL) <= 32)
+        MessageBoxW(hwnd, L"Windows display settings could not be opened.", L"WinSideUSB", MB_OK | MB_ICONINFORMATION);
+}
+
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE: {
@@ -377,7 +408,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         CreateUiText(hwnd, IDC_SUBTITLE, L"Your iPad. More room to work.", g_fontSmall);
         CreateUiText(hwnd, IDC_LABEL_IPAD, L"Device", g_fontSmall);
         CreateUiText(hwnd, IDC_LBL_IPAD, L"Looking for your iPad\u2026", g_fontBody);
-        CreateUiText(hwnd, IDC_LABEL_MODE, L"Display mode", g_fontSmall);
+        CreateUiText(hwnd, IDC_LABEL_MODE, L"Profile, resolution & refresh rate", g_fontSmall);
         CreateUiText(hwnd, IDC_LBL_STATUS, L"Looking for iPad", g_fontSmall, SS_CENTER);
         CreateUiText(hwnd, IDC_LABEL_ENCODER, L"Video", g_fontSmall);
         CreateUiText(hwnd, IDC_LBL_ENCODER, L"\u2014", g_fontBody);
@@ -385,9 +416,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         CreateUiText(hwnd, IDC_LBL_FPS, L"\u2014", g_fontMetric, SS_RIGHT);
         CreateUiText(hwnd, IDC_HINT, L"Connect your iPad with a USB cable and unlock it.", g_fontSmall, SS_CENTER);
 
-        int ids[] = { IDC_BTN_DETECT, IDC_BTN_ACTION, IDC_BTN_LOGS };
-        const wchar_t* labels[] = { L"Refresh", L"Start display", L"View logs" };
-        for (int i = 0; i < 3; ++i) {
+        int ids[] = { IDC_BTN_DETECT, UI_BTN_SCALING, IDC_BTN_ACTION, IDC_BTN_LOGS };
+        const wchar_t* labels[] = { L"Refresh", L"Windows scaling", L"Start display", L"View logs" };
+        for (int i = 0; i < 4; ++i) {
             HWND button = CreateWindowExW(0, L"BUTTON", labels[i],
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 0, 0, 0, 0,
                 hwnd, (HMENU)(INT_PTR)ids[i], nullptr, nullptr);
@@ -398,7 +429,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             CBS_OWNERDRAWFIXED | CBS_HASSTRINGS, 0, 0, 0, 0,
             hwnd, (HMENU)(INT_PTR)IDC_COMBO_MODE, nullptr, nullptr);
         SetWindowTheme(combo, L"Explorer", nullptr);
-        // Tab order: refresh, mode, primary action, logs.
+        // Tab order: refresh, mode, Windows scaling, primary action, logs.
         SetWindowPos(combo, GetDlgItem(hwnd, IDC_BTN_DETECT), 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         LayoutUi(hwnd);
@@ -451,7 +482,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         const DRAWITEMSTRUCT* item = (const DRAWITEMSTRUCT*)lp;
         if (!item) break;
         if (item->CtlID == IDC_COMBO_MODE) { DrawComboItem(item); return TRUE; }
-        if (item->CtlID == IDC_BTN_ACTION || item->CtlID == IDC_BTN_DETECT || item->CtlID == IDC_BTN_LOGS) {
+        if (item->CtlID == IDC_BTN_ACTION || item->CtlID == IDC_BTN_DETECT ||
+            item->CtlID == IDC_BTN_LOGS || item->CtlID == UI_BTN_SCALING) {
             DrawModernButton(item); return TRUE;
         }
         break;
@@ -471,28 +503,27 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (!g_detectionSameDevice) {
             SendMessageW(combo, CB_RESETCONTENT, 0, 0);
             for (int i = 0; g_detectFound && i < g_modeCount; ++i) {
-                wchar_t label[64];
-                swprintf_s(label, L"%d \u00d7 %d   \u00b7   %d Hz", g_modes[i].w, g_modes[i].h, g_modes[i].fps);
-                SendMessageW(combo, CB_ADDSTRING, 0, (LPARAM)label);
+                std::wstring label = ModeLabel(g_modes[i]);
+                SendMessageW(combo, CB_ADDSTRING, 0, (LPARAM)label.c_str());
             }
         }
         if (g_detectFound && g_modeCount > 0) {
-            if (!g_detectionSameDevice) {
-                int selection = 0;
-                for (int i = 0; i < g_modeCount; ++i) {
-                    if (g_modes[i].w == g_targetW && g_modes[i].h == g_targetH &&
-                        g_modes[i].fps == g_targetFPS.load()) { selection = i; break; }
-                }
-                SendMessageW(combo, CB_SETCURSEL, selection, 0);
-                g_targetW = g_modes[selection].w;
-                g_targetH = g_modes[selection].h;
-                g_targetFPS = g_modes[selection].fps;
+            int selection = 0;
+            for (int i = 0; i < g_modeCount; ++i) {
+                if (g_modes[i].w == g_targetW && g_modes[i].h == g_targetH &&
+                    g_modes[i].fps == g_targetFPS.load()) { selection = i; break; }
+            }
+            SendMessageW(combo, CB_SETCURSEL, selection, 0);
+            SelectModeOption(selection, false);
+            if (!g_detectionSameDevice || g_uiVisibleDetection) {
                 SetUiStatus(hwnd, L"Ready to connect", UI_READY,
                     L"Open WinSideUSB on your iPad. Your display will connect automatically.");
+                UpdateModeHint(hwnd);
             }
         }
         else SetUiStatus(hwnd, L"Connect your iPad", UI_MUTED,
             L"Use a USB cable, unlock your iPad and trust this computer.");
+        g_uiVisibleDetection = false;
         UpdateUiControls(hwnd);
         if (g_detectFound && !g_autoStartSuppressed && GetTickCount64() >= g_nextAutoAttempt)
             StartStream(hwnd);
@@ -514,6 +545,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 g_autoStartSuppressed = true;
                 SetUiStatus(hwnd, L"Display could not start", UI_WARN, error.c_str());
             }
+            else if (stopped && g_detectFound) UpdateModeHint(hwnd);
         }
         else if (!g_uiStopping) {
             switch (status) {
@@ -523,7 +555,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 SetUiStatus(hwnd, L"Waiting for iPad app", UI_WARN, L"Open WinSideUSB on your iPad to continue."); break;
             case SS_CONNECTED:
                 SetUiStatus(hwnd, g_uiHasFrames ? L"Display active" : L"Preparing display", UI_READY,
-                    g_uiHasFrames ? L"Move a Windows window onto your iPad to get started." : L"Your iPad is connected. Preparing the video stream\u2026"); break;
+                    g_uiHasFrames ? L"Move a Windows window onto your iPad to get started." : L"Your iPad is connected. Preparing the video stream\u2026");
+                if (g_uiHasFrames) UpdateModeHint(hwnd);
+                break;
             case SS_ENCODER_GPU: SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_ENCODER), L"GPU acceleration"); break;
             case SS_ENCODER_HW: SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_ENCODER), L"Hardware encoding"); break;
             case SS_ENCODER_SW: SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_ENCODER), L"Software encoding"); break;
@@ -541,8 +575,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         SetWindowTextW(GetDlgItem(hwnd, IDC_LBL_FPS), label);
         if (wp > 0 && !g_uiHasFrames) {
             g_uiHasFrames = true;
-            if (g_uiStatus == SS_CONNECTED)
+            if (g_uiStatus == SS_CONNECTED) {
                 SetUiStatus(hwnd, L"Display active", UI_READY, L"Move a Windows window onto your iPad to get started.");
+                UpdateModeHint(hwnd);
+            }
         }
         return 0;
     }
@@ -592,15 +628,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case IDM_SHOW: RemoveTrayIcon(); ShowWindow(hwnd, SW_RESTORE); SetForegroundWindow(hwnd); break;
         case IDC_BTN_DETECT: if (!g_streaming.load()) TriggerDetect(hwnd); break;
         case IDC_BTN_LOGS: OpenDiagnostics(hwnd); break;
+        case UI_BTN_SCALING: if (g_detectFound) OpenWindowsScaling(hwnd); break;
         case IDC_COMBO_MODE:
             if (HIWORD(wp) == CBN_SELCHANGE && !g_streaming.load() && !g_detecting.load()) {
                 int selection = (int)SendDlgItemMessageW(hwnd, IDC_COMBO_MODE, CB_GETCURSEL, 0, 0);
-                if (selection >= 0 && selection < g_modeCount) {
-                    g_targetW = g_modes[selection].w;
-                    g_targetH = g_modes[selection].h;
-                    g_targetFPS = g_modes[selection].fps;
-                    if (g_virtualDisplayAttached.load()) SetVirtualDisplayMode(g_targetW, g_targetH, g_targetFPS.load());
-                }
+                if (SelectModeOption(selection)) UpdateModeHint(hwnd);
             }
             break;
         case IDC_BTN_ACTION:

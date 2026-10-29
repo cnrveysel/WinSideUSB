@@ -43,6 +43,7 @@
 #include "SignedDisplayOutput.h"
 #include "FramePacing.h"
 #include "DesktopCursor.h"
+#include "DisplayModes.h"
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "d3d11.lib")
@@ -220,18 +221,19 @@ static const iPadDef g_ipadDefs[] = {
 };
 static const int IPAD_DEF_COUNT = (int)(sizeof(g_ipadDefs) / sizeof(g_ipadDefs[0]));
 
-struct ModeOption { int w, h, fps; };
-static ModeOption g_modes[4];
+using ModeOption = winsideusb::ModeOption;
+static ModeOption g_modes[winsideusb::MaxDisplayModes];
 static int        g_modeCount = 0;
 
-static void AddModeOption(int w, int h, int fps) {
-    if (w <= 0 || h <= 0 || fps <= 0) return;
+static void AddModeOption(int w, int h, int fps,
+    winsideusb::DisplayProfile profile = winsideusb::DisplayProfile::Fallback) {
+    if (w <= 0 || h <= 0 || (w & 1) || (h & 1) || (fps != 60 && fps != 120)) return;
     for (int i = 0; i < g_modeCount; i++) {
         if (g_modes[i].w == w && g_modes[i].h == h && g_modes[i].fps == fps)
             return;
     }
     if (g_modeCount < (int)(sizeof(g_modes) / sizeof(g_modes[0])))
-        g_modes[g_modeCount++] = { w, h, fps };
+        g_modes[g_modeCount++] = { w, h, fps, profile };
 }
 
 // ── Globals ──────────────────────────────────────────────────────────
@@ -244,11 +246,14 @@ static std::atomic<bool> g_streaming{ false };
 static int               g_targetW = 2732;
 static int               g_targetH = 2048;
 static std::atomic<int>  g_targetFPS{ 120 };
+static int               g_nativeW = 0;
+static int               g_nativeH = 0;
 static std::atomic<bool> g_detecting{ false };
 static std::atomic<bool> g_virtualDisplayAttached{ false };
 static winsideusb::SignedDisplayClient g_displayClient;
 static std::wstring      g_captureDisplayName;
 static std::string       g_detectedUdid;
+static std::string       g_detectedProductType;
 static std::atomic<bool> g_closing{ false };
 static std::thread       g_detectThread;
 static bool              g_streamCompletionPending = false;
@@ -260,6 +265,101 @@ static ULONGLONG         g_nextPresenceCheck = 0;
 static std::atomic<bool> g_deviceChangePending{ false };
 static std::mutex        g_streamErrorMutex;
 static std::wstring      g_streamError;
+
+static std::wstring ModeLabel(const ModeOption& mode) {
+    const wchar_t* profile = L"Fallback";
+    switch (mode.profile) {
+    case winsideusb::DisplayProfile::Native: profile = L"Native"; break;
+    case winsideusb::DisplayProfile::Balanced: profile = L"Balanced"; break;
+    case winsideusb::DisplayProfile::LaptopSize: profile = L"Laptop-size"; break;
+    default: break;
+    }
+    return std::wstring(profile) + L" \u00b7 " + std::to_wstring(mode.w) + L" \u00d7 " +
+        std::to_wstring(mode.h) + L" \u00b7 " + std::to_wstring(mode.fps) + L" Hz";
+}
+
+static const wchar_t* ModeHint(const ModeOption& mode) {
+    switch (mode.profile) {
+    case winsideusb::DisplayProfile::Native:
+        return L"Native panel detail. Windows scaling is unchanged.";
+    case winsideusb::DisplayProfile::Balanced:
+        return L"Try 150% Windows scale for the iPad. Less detail than Native.";
+    case winsideusb::DisplayProfile::LaptopSize:
+        return L"Use 100% Windows scale for the iPad for laptop-sized windows. Less detail.";
+    default:
+        return L"Unknown iPad: choose a mode and check Windows display scaling.";
+    }
+}
+
+// Own per-model preference only. No Windows desktop/DPI settings are written.
+// The single versioned value avoids partially saved width/height/FPS tuples.
+struct StoredDisplayMode { DWORD version, width, height, fps; };
+static_assert(sizeof(StoredDisplayMode) == 16, "Display mode preference format changed");
+
+static std::wstring ModePreferenceKey(const std::string& productType) {
+    if (productType.empty() || productType.size() > 64) return {};
+    std::wstring key = L"Software\\WinSideUSB\\DisplayModes\\";
+    for (char character : productType) {
+        if (!((character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z') ||
+            (character >= '0' && character <= '9') || character == ',' || character == '-' || character == '_'))
+            return {};
+        key += static_cast<wchar_t>(character);
+    }
+    return key;
+}
+
+static bool LoadModePreference(const std::string& productType, ModeOption& mode) {
+    const std::wstring key = ModePreferenceKey(productType);
+    if (key.empty()) return false;
+    StoredDisplayMode stored{};
+    DWORD size = static_cast<DWORD>(sizeof(stored));
+    if (RegGetValueW(HKEY_CURRENT_USER, key.c_str(), L"SelectedMode", RRF_RT_REG_BINARY,
+        nullptr, &stored, &size) != ERROR_SUCCESS || size != sizeof(stored) || stored.version != 1 ||
+        !stored.width || !stored.height || stored.width > 16384 || stored.height > 16384 ||
+        (stored.fps != 60 && stored.fps != 120)) return false;
+    mode = {static_cast<int>(stored.width), static_cast<int>(stored.height), static_cast<int>(stored.fps)};
+    return true;
+}
+
+static void SaveModePreference(const ModeOption& mode) {
+    const std::wstring key = ModePreferenceKey(g_detectedProductType);
+    if (key.empty()) return;
+    HKEY opened = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, key.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE,
+        KEY_SET_VALUE, nullptr, &opened, nullptr) != ERROR_SUCCESS) return;
+    const StoredDisplayMode stored{1, static_cast<DWORD>(mode.w), static_cast<DWORD>(mode.h),
+        static_cast<DWORD>(mode.fps)};
+    RegSetValueExW(opened, L"SelectedMode", 0, REG_BINARY,
+        reinterpret_cast<const BYTE*>(&stored), static_cast<DWORD>(sizeof(stored)));
+    RegCloseKey(opened);
+}
+
+static int FindModeOption(const ModeOption& requested) {
+    for (int index = 0; index < g_modeCount; ++index)
+        if (winsideusb::SameMode(g_modes[index], requested)) return index;
+    return -1;
+}
+
+static bool SelectModeOption(int selection, bool persist = true) {
+    if (selection < 0 || selection >= g_modeCount || g_streaming.load() ||
+        g_streamCompletionPending || g_closing.load()) return false;
+    const ModeOption& mode = g_modes[selection];
+    g_targetW = mode.w;
+    g_targetH = mode.h;
+    g_targetFPS = mode.fps;
+    if (persist) SaveModePreference(mode);
+    return true;
+}
+
+static void RestoreModeSelection(const ModeOption& previous, bool sameDevice) {
+    int selection = sameDevice ? FindModeOption(previous) : -1;
+    if (selection < 0) {
+        ModeOption saved;
+        if (LoadModePreference(g_detectedProductType, saved)) selection = FindModeOption(saved);
+    }
+    if (selection < 0 && g_modeCount > 0) selection = 0;
+    SelectModeOption(selection, false);
+}
 
 static constexpr int COLOR_TEST_GOP_SECONDS = 5;
 static constexpr int IDLE_HEARTBEAT_FPS = 4;
@@ -2722,6 +2822,8 @@ static std::wstring g_detectedName;
 static bool         g_detectFound = false;
 
 static void DetectThread(HWND target) {
+    const ModeOption previous{g_targetW, g_targetH, g_targetFPS.load()};
+    const std::string previousProductType = g_detectedProductType;
     std::string pt = RunIdeviceinfo("ProductType");
     std::string udid = pt.rfind("iPad", 0) == 0 ? RunIdeviceinfo("UniqueDeviceID") : "";
     if (!ValidDeviceUdid(udid)) { pt.clear(); udid.clear(); }
@@ -2736,15 +2838,23 @@ static void DetectThread(HWND target) {
 
     g_detectFound = false;
     g_modeCount = 0;
+    g_nativeW = 0;
+    g_nativeH = 0;
+    g_detectedProductType.clear();
 
     for (int i = 0; i < IPAD_DEF_COUNT; i++) {
         if (pt == g_ipadDefs[i].productType) {
             const iPadDef& d = g_ipadDefs[i];
             g_detectedName = d.displayName;
             g_detectFound = true;
-            AddModeOption(d.w, d.h, d.maxFPS);
-            if (d.maxFPS > 60)
-                AddModeOption(d.w, d.h, 60);
+            g_detectedProductType = pt;
+            g_nativeW = d.w;
+            g_nativeH = d.h;
+            const auto choices = winsideusb::BuildKnownModes(d.w, d.h, d.maxFPS);
+            for (int index = 0; index < choices.count; ++index) {
+                const ModeOption& mode = choices.modes[index];
+                AddModeOption(mode.w, mode.h, mode.fps, mode.profile);
+            }
             break;
         }
     }
@@ -2755,6 +2865,7 @@ static void DetectThread(HWND target) {
             for (char c : pt) g_detectedName += (wchar_t)c;
             g_detectedName += L")";
             g_detectFound = true;
+            g_detectedProductType = pt;
             AddModeOption(2360, 1640, 60);
             AddModeOption(2048, 1536, 60);
             AddModeOption(1920, 1080, 60);
@@ -2772,6 +2883,8 @@ static void DetectThread(HWND target) {
             DisconnectVirtualDisplay();
     }
 
+    if (g_detectFound)
+        RestoreModeSelection(previous, g_detectionSameDevice && pt == previousProductType);
     PostMessage(target, WM_DETECT_DONE, 0, 0);
 }
 

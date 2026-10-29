@@ -139,6 +139,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="WindowUI.h" />
+    <ClInclude Include="DisplayModes.h" />
     <ClInclude Include="SharedDisplayProtocol.h" />
     <ClInclude Include="SignedDisplayClient.h" />
     <ClInclude Include="SignedDisplayOutput.h" />

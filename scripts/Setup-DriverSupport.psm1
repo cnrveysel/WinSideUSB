@@ -513,10 +513,23 @@ function New-SetupDisplayConfiguration([string]$AppSourcePath, [string]$Destinat
     foreach ($row in [regex]::Matches($table.Groups[1].Value, '(?m)^\s*\{\s*"iPad[^"]+",.*?,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\}')) {
         $width = [int]$row.Groups[1].Value; $height = [int]$row.Groups[2].Value
         $sizes["$width,$height"] = @($width, $height)
+        # Match DisplayModes.h: three-quarter size, keeping the 4:3 panel group
+        # exact (2732x2048 becomes 2048x1536), and even NV12 dimensions.
+        $balancedWidth = ([int][Math]::Floor($width * 3.0 / 4.0)) -band -2
+        $balancedHeight = ([int][Math]::Floor($height * 3.0 / 4.0)) -band -2
+        if ([Math]::Abs(3 * $width - 4 * $height) -le 8) {
+            $unit = ([int][Math]::Floor([Math]::Min($balancedWidth / 4.0, $balancedHeight / 3.0))) -band -2
+            $balancedWidth = 4 * $unit; $balancedHeight = 3 * $unit
+        }
+        if ($balancedWidth -ge 800 -and $balancedHeight -ge 600) {
+            $sizes["$balancedWidth,$balancedHeight"] = @($balancedWidth, $balancedHeight)
+        }
         # Half-size NV12 frames need even dimensions, including iPad mini's 2266px width.
         $halfWidth = ([int][Math]::Floor($width / 2.0)) -band -2
         $halfHeight = ([int][Math]::Floor($height / 2.0)) -band -2
-        $sizes["$halfWidth,$halfHeight"] = @($halfWidth, $halfHeight)
+        if ($halfWidth -ge 800 -and $halfHeight -ge 600) {
+            $sizes["$halfWidth,$halfHeight"] = @($halfWidth, $halfHeight)
+        }
     }
     foreach ($fallback in [regex]::Matches($source, 'AddModeOption\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)')) {
         $width = [int]$fallback.Groups[1].Value; $height = [int]$fallback.Groups[2].Value

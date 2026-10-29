@@ -1,5 +1,7 @@
 # WinSideUSB Roadmap
 
+Güncel performans önceliği: büyük pencere hareketi ve sabit görüntüden ani harekete geçiş için kod/log bulguları, uygulama sırası ve kabul testleri [120 Hz akıcılık yol haritasında](docs/PERFORMANCE_120HZ_ROADMAP.md) yer alıyor (27 Ekim 2026).
+
 Hedef: iPad'i USB üzerinden ikinci ekran ve Apple Pencil ile yazılabilen bir çalışma alanı olarak kullanmayı kolaylaştırmak. Kullanıcı Windows tarafında tek bir setup EXE çalıştırabilmeli; uygulama, sürücü ve gerekli bağımlılıklar birlikte kurulmalı ve aynı kolaylıkla kaldırılabilmeli.
 
 Öncelik sırası: **arayüz → tek setup EXE → otomatik kaldırma → Apple Pencil desteği**. Tamamlanan uygulama işleri işaretlenmiştir; kalan işler ve cihaz testleri aşağıda takip edilir. Sürücü imzalama araştırması, setup aşamasını bekletmemek için arayüz çalışmasıyla paralel başlayabilir. Henüz teslim tarihi belirlenmedi.

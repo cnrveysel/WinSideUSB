@@ -19,11 +19,23 @@ The pipe lease is renewed every three seconds and expires after fifteen seconds 
 
 ## Exact pixel size and Hz
 
-The existing iPad database and mode selector retain their values. Setup generates upstream XML containing every supported iPad resolution and the existing 60/120 Hz choices, plus the unknown-iPad fallback resolutions. The XML is separate from the signed driver package, so configuring modes does not invalidate the signature. UMDF driver-host accounts receive read access; only administrators and SYSTEM can modify configuration.
+The mode selector offers Native, Balanced (approximately three-quarter dimensions) and Laptop-size (half dimensions) for known iPads. For iPad14,5 these are 2732×2048, 2048×1536 and 1366×1024, each at 120 or 60 Hz. A 60 Hz iPad never receives a 120 Hz choice. Reduced modes below 800×600 are omitted; encoder dimensions are even. Native at the highest supported refresh rate remains the default. The last valid selection is saved per model under the app's own `HKCU\Software\WinSideUSB\DisplayModes` key and retained across Refresh/relaunch.
+
+Stop the display, choose a profile/resolution/refresh rate, then start it. The app does not alter dimensions underneath a running encoder. Laptop-size suggests 100% Windows scaling, Balanced suggests 150%; the **Windows scaling** link opens display settings so the user can select the iPad. The app does not write Windows DPI settings. Resolution and effective UI scale must be checked separately. Reduced modes trade detail for a closer physical pixel size; they do not guarantee arbitrary apps' window behavior.
+
+Setup generates upstream XML containing every offered profile dimension and the existing 60/120 Hz choices, plus the unknown-iPad fallback resolutions. The XML is separate from the signed driver package, so configuring modes does not invalidate the signature. UMDF driver-host accounts receive read access; only administrators and SYSTEM can modify configuration. The lightweight `tests/Run-DisplayModesTests.ps1` checks the C++ mode helper and cross-checks generated XML against the helper for all native model variants.
 
 The application selects an exact progressive 32-bit mode and verifies actual dimensions and refresh rate through GDI and DisplayConfig. It snapshots physical displays before enabling the device and verifies their resolution, refresh rate, primary status, orientation, position and display paths. A failed activation attempts to restore the original topology. Normal disconnect does not restore an old snapshot over later user changes.
 
 If the requested mode is unavailable, connection fails with a visible message instead of silently substituting a lower resolution or refresh rate. Capture also checks dimensions/rotation/refresh rate and texture compatibility so a later Windows mode change cannot feed a wrongly sized texture to the existing encoder.
+
+## Physical display size
+
+The upstream default EDID describes a 50×31 cm monitor, independently of the XML mode list. A model-specific calibration can supply `display-config/user_edid.bin` with `CustomEdid=true` and registry `CUSTOMEDID=1`. Preserve the original identity, timing descriptors, extension data and the XML resolution/refresh list. Keep setup state's XML hash and recorded registry value synchronized so uninstall ownership checks remain valid.
+
+`scripts/Set-iPadEdidSize.py INPUT OUTPUT --width-mm 263 --height-mm 197` prepares the 12.9-inch iPad Pro profile from an existing valid EDID. It changes only physical-size fields and affected checksums; it does not select a resolution or refresh rate. It validates every source block before writing atomically. Other iPad models require their own dimensions; this profile is not an installer default.
+
+The local iPad14,5 calibration on 2026-10-29 was verified at 2732×2048 @120 Hz after reconnect, with laptop settings preserved. See [the measurements and rollback record](PERFORMANCE_120HZ_FINDINGS_2026-10-29.md#uygulanan-fiziksel-boyut-düzeltmesi). Setup currently regenerates the default configuration during upgrade; model calibration must be reapplied and verified after such an upgrade. A custom EDID file is not presently an installer-owned payload and may remain after uninstall.
 
 ## Ownership and coexistence
 
