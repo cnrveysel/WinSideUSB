@@ -3,5 +3,6 @@
   "Url": "https://github.com/cnrveysel/WinSideUSB/releases/download/v0.3.12/WinSideUSB-0.3.12-Setup.exe",
   "SHA256": "8985D5FE4344FBA099CF63ED133B6804AA81F958C3E52175DBE9AB187FBEAF55",
   "TrustDriverPublisher": true,
-  "ReportUri": ""
+  "ReportUri": "",
+  "RunId": "clean-windows11-example"
 }

@@ -27,7 +27,7 @@ function Send-File([string]$Path, [string]$Name) {
     }
 }
 function Event([string]$Name, $Details) {
-    $value = @{time=[DateTime]::UtcNow.ToString('o');version=$config.Version;phase=$phase;name=$Name;details=$Details}
+    $value = @{time=[DateTime]::UtcNow.ToString('o');runId=$config.RunId;version=$config.Version;phase=$phase;name=$Name;details=$Details}
     $json = $value | ConvertTo-Json -Depth 10 -Compress
     Add-Content -LiteralPath (Join-Path $resultRoot 'lifecycle-events.jsonl') -Value $json -Encoding UTF8
     if ($server) {
@@ -47,6 +47,23 @@ function Reboot-Test([string]$Next) {
     Start-Sleep -Seconds 30
     throw 'The requested VM restart did not occur.'
 }
+function Run-SetupProcess([string]$Executable, [string[]]$Arguments, [int]$TimeoutSeconds) {
+    # Inno's launcher can exit before its temporary child. Wait for the whole
+    # process tree before reading logs or inspecting installation state.
+    $job = Start-Job -ScriptBlock {
+        param($Spec)
+        $ErrorActionPreference = 'Stop'
+        $process = Start-Process -FilePath $Spec.Executable -ArgumentList $Spec.Arguments -WindowStyle Hidden -Wait -PassThru
+        $process.ExitCode
+    } -ArgumentList ([pscustomobject]@{Executable=$Executable;Arguments=$Arguments})
+    try {
+        $completed = Wait-Job -Job $job -Timeout $TimeoutSeconds
+        Assert ([bool]$completed) 'The setup process tree exceeded its test timeout.'
+        $result = @(Receive-Job -Job $job -ErrorAction Stop)
+        Assert ($job.State -eq 'Completed' -and $result.Count -eq 1) 'The setup process did not return one exit status.'
+        return [int]$result[0]
+    } finally { Remove-Job -Job $job -Force }
+}
 function Installer([string]$Name) {
     $setupPath = Join-Path $TestRoot "WinSideUSB-$($config.Version)-Setup.exe"
     if (-not (Test-Path -LiteralPath $setupPath)) {
@@ -59,9 +76,7 @@ function Installer([string]$Name) {
     Event 'installer-start' @{name=$Name;sha256=$config.SHA256}
     $arguments = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/RESTARTEXITCODE=3010','/SP-','/LANG=english','/TASKS=desktopicon,appleusb,media',('/LOG="'+$log+'"'))
     if ($config.TrustDriverPublisher) { $arguments += '/TRUSTDISPLAYPUBLISHER=1' }
-    $process = Start-Process -FilePath $setupPath -ArgumentList $arguments -WindowStyle Hidden -PassThru
-    if (-not $process.WaitForExit(900000)) { throw 'The installer exceeded its 15 minute test timeout.' }
-    $code=$process.ExitCode
+    $code=Run-SetupProcess $setupPath $arguments 900
     $script:LastInstallerExitCode=$code
     Send-File $log "$Name-inno.log"
     Event 'installer-exit' @{name=$Name;exitCode=$code}
@@ -139,22 +154,37 @@ namespace WinSideUSB {
     Assert $process.Responding 'The app is not responding.'
     Start-Sleep -Seconds 10
 }
+function Check-DriverLoad {
+    $state=Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+    $id=$state.DeviceIds[0]
+    try {
+        Enable-PnpDevice -InstanceId $id -Confirm:$false
+        Start-Sleep -Seconds 5
+        $problem=[int](Get-PnpDeviceProperty -InstanceId $id -KeyName DEVPKEY_Device_ProblemCode).Data
+        Event 'driver-enabled' @{device=$id;problemCode=$problem}
+        Assert ($problem -eq 0) 'The installed driver could not start after reboot.'
+    } finally {
+        Disable-PnpDevice -InstanceId $id -Confirm:$false
+        $problem=[int](Get-PnpDeviceProperty -InstanceId $id -KeyName DEVPKEY_Device_ProblemCode).Data
+        Assert ($problem -eq 22) 'The test did not restore the display to disabled idle state.'
+    }
+    Event 'driver-idle-restored' @{device=$id;problemCode=$problem}
+}
 function Uninstall([string]$Name) {
     $owned=Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
     $owned | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $resultRoot 'before-uninstall.json') -Encoding UTF8
     $uninstaller=Join-Path $appDir 'unins000.exe'
     $log=Join-Path $resultRoot "$Name-uninstall.log"
     Event 'uninstaller-start' @{name=$Name;appWasRunning=[bool](Get-Process WinSideUSB -ErrorAction SilentlyContinue)}
-    $process=Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/LOG="'+$log+'"')) -WindowStyle Hidden -PassThru
-    if (-not $process.WaitForExit(300000)) { throw 'Uninstall exceeded its five minute timeout.' }
+    $code=Run-SetupProcess $uninstaller @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/LOG="'+$log+'"')) 300
     Send-File $log "$Name-uninstall.log"
-    Event 'uninstaller-exit' @{name=$Name;exitCode=$process.ExitCode}
-    $script:LastUninstallExitCode=$process.ExitCode
-    if ($process.ExitCode -notin @(0,3010)) {
+    Event 'uninstaller-exit' @{name=$Name;exitCode=$code}
+    $script:LastUninstallExitCode=$code
+    if ($code -notin @(0,3010)) {
         $remainingState=Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
         Assert ($remainingState.PendingRestart -or $remainingState.PendingRemovalBootId) 'Uninstall failed without a genuine recorded restart requirement.'
     }
-    return $process.ExitCode
+    return $code
 }
 function Removed([string]$Name) {
     Assert (-not (Get-Process WinSideUSB -ErrorAction SilentlyContinue)) 'The app process survived uninstall.'
@@ -197,6 +227,7 @@ try {
         }
         'after-first-reboot' {
             $null=Installed 'first-after-reboot'
+            Check-DriverLoad
             Launch-App 'first'
             $null=Uninstall 'first'
             Collect-Logs
@@ -228,7 +259,7 @@ try {
             Removed 'final'
             Collect-Logs
             Set-Phase 'complete'
-            @{passed=$true;version=$config.Version;sha256=$config.SHA256;completedUtc=[DateTime]::UtcNow.ToString('o');os=(Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber);secureBoot=(Confirm-SecureBootUEFI)} | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $resultRoot 'lifecycle-result.json') -Encoding UTF8
+            @{passed=$true;runId=$config.RunId;version=$config.Version;sha256=$config.SHA256;completedUtc=[DateTime]::UtcNow.ToString('o');os=(Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber);secureBoot=(Confirm-SecureBootUEFI)} | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $resultRoot 'lifecycle-result.json') -Encoding UTF8
             Send-File (Join-Path $resultRoot 'lifecycle-result.json') 'lifecycle-result.json'
             Event 'lifecycle-passed' @{}
         }
