@@ -8,7 +8,7 @@ The default **Signed** mode uses the unchanged trusted-signed Virtual Display Dr
 
 1. Use **Windows 11 x64**, build 22000 or later. Windows on ARM and S mode are not supported by this integration.
 2. Run setup and leave its prerequisite options enabled. If Apple USB support is absent, setup downloads Apple's official iTunes package (about 200 MB) with progress/cancellation, verifies the pinned hash and Apple signature, then extracts and installs only Apple Mobile Device Support. The extracted MSI also needs its own pinned hash and trusted Apple signature; iTunes itself is not installed. The task explicitly accepts Apple's terms, linked in setup. An existing usable Apple installation is reused. On Windows N, missing media components are installed through Windows Update. These downloads need internet access; an already prepared PC does not need them.
-3. For a **Development** setup, prepare Windows for the test-signed driver first: test-signing must already be enabled and Secure Boot disabled. See [DRIVER.md](DRIVER.md#test-signed-development-install). Setup checks these settings and leaves them under your control.
+3. On the **Driver publisher** page, choose whether setup may add the verified SignPath Foundation publisher to this machine's Trusted Publishers store. The option is unchecked by default. Selecting it allows driver installation without a separate Windows publisher prompt; leaving it unchecked keeps Windows' normal approval prompt. The trust applies to other drivers signed by the same certificate. For a separate **Development** setup, test-signing must already be enabled and Secure Boot disabled; see [DRIVER.md](DRIVER.md#test-signed-development-install).
 4. Accept the administrator prompt and finish setup. It installs the bundled Visual C++ runtime when needed, the virtual display driver, service and app, with Start menu and desktop shortcuts. No terminal commands or manual DLL/driver copies are required.
 5. Complete any requested restart. Otherwise the default finish action opens WinSideUSB immediately. With an iPad client open, connect USB and trust the PC on the iPad if asked. The managed display stays disabled until the USB handshake succeeds. Stop, USB loss or app exit releases it. Pixel/Hz choices retain the existing modes.
 
@@ -24,11 +24,13 @@ WinSideUSB setup does not install the iPad application. Use the included `swiftc
 
 | Mode | Output name | Driver requirement |
 | --- | --- | --- |
-| Signed (default) | `WinSideUSB-0.3.11-Setup.exe` | Original pinned MttVDD INF/DLL/CAT, trusted vendor signatures and catalog contents; native display service; no test-signing requirement |
+| Signed (default) | `WinSideUSB-0.3.12-Setup.exe` | Original pinned MttVDD INF/DLL/CAT, trusted vendor signatures and catalog contents; native display service; no test-signing requirement |
 | Development | `WinSideUSB-0.2.0-Development-Setup.exe` | Test-signed package, matching test certificate, test-signing already on, Secure Boot off |
 | Release | `WinSideUSB-0.2.0-Setup.exe` | Trusted app/DLL/CAT signatures and signed setup/uninstaller; clean-PC validation with Secure Boot on and test-signing off |
 
-The default version is `0.3.11` and mode is **Signed**. Signed verifies the original vendor files and trusted DLL/CAT signatures; it never imports a development certificate or changes Windows security settings. Signing our app/setup is optional in this mode. The optional **Release** mode retains trusted app/own-driver signatures and requires `-SigningCertificateThumbprint` to sign setup and its uninstaller. **Development** remains explicit and separately labeled.
+The default version is `0.3.12` and mode is **Signed**. Signed verifies the original vendor files, trusted DLL/CAT signatures and reviewed publisher thumbprint. Only the explicit publisher option can add that leaf certificate to `LocalMachine\TrustedPublisher`; it never adds a root certificate or enables test-signing. Pre-existing trust is preserved. Trust introduced by setup is removed during rollback/uninstall once no driver package needs it. Signing our app/setup is optional in this mode. The optional **Release** mode retains trusted app/own-driver signatures and requires `-SigningCertificateThumbprint` to sign setup and its uninstaller. **Development** remains explicit and separately labeled.
+
+For unattended Signed installation, explicitly pass `/TRUSTDISPLAYPUBLISHER=1` when accepting the same machine-wide publisher trust. Without that flag, silent setup requires this publisher to be trusted already and otherwise fails before installing prerequisites or staging the driver. This avoids an invisible Windows consent dialog. The signed package bytes and publisher certificate remain pinned regardless of the choice. See Microsoft's [Trusted Publishers guidance](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/trusted-publishers-certificate-store).
 
 Development app/setup executables may be unsigned. Only the public test certificate is included in a Development payload; private signing keys are never included.
 
@@ -44,7 +46,7 @@ For the normal ready-signed setup, build `WinSideUSB.sln` Release x64 (including
 
 ```powershell
 .\scripts\Get-SignedDisplayDriver.ps1
-.\scripts\Build-Setup.ps1 -Version "0.3.11" -DriverMode Signed `
+.\scripts\Build-Setup.ps1 -Version "0.3.12" -DriverMode Signed `
   -DriverPackageDir ".\.codex\vendor\VirtualDisplayDriver" `
   -ServicePath ".\x64\Release\WinSideUSBDisplayService.exe" `
   -VcRedistPath "C:\Path\To\VC_redist.x64.exe"
@@ -84,7 +86,7 @@ Additional build parameters:
 
 | Parameter | Purpose |
 | --- | --- |
-| `Version` | Package version; default `0.3.11` |
+| `Version` | Package version; default `0.3.12` |
 | `DriverMode` | `Signed` (default), `Release` or `Development` |
 | `ServicePath` | Built native display-service EXE; required for Signed mode |
 | `AppPath` | Built Windows app |
@@ -110,7 +112,7 @@ The installed app is `%ProgramFiles%\WinSideUSB\WinSideUSB.exe`, with `driver`, 
 
 Signed mode also installs `WinSideUSBDisplayService.exe` and a LocalSystem Windows service. It records its exact root-device instance, service and configuration ownership. An unrelated MttVDD installation is detected and preserved; setup refuses to change it because upstream shares a global configuration path. Upgrading an owned legacy driver removes only the prior owned device before switching to the signed driver.
 
-To remove the app, open **Settings → Apps → Installed apps → WinSideUSB → Uninstall** (the development entry is **WinSideUSB Development Preview**). The uninstaller closes the owned app, stops/removes the owned service, removes its virtual display device/package and restores recorded configuration/registry values. Development certificate cleanup applies only to the legacy development package. Only after this succeeds does it remove app files and shortcuts.
+To remove the app, open **Settings → Apps → Installed apps → WinSideUSB → Uninstall** (the development entry is **WinSideUSB Development Preview**). The uninstaller closes the owned app, stops/removes the owned service, removes its virtual display device/package and restores recorded configuration/registry values. It removes publisher trust only when this setup introduced it and no other driver package uses it. Only after driver cleanup succeeds does it remove app files and shortcuts.
 
 If driver cleanup fails or returns restart-required status, uninstall preserves the app and helper scripts for retry. Follow the reported recovery step, restart when required, then run **Uninstall** again to complete driver/certificate cleanup and file removal. A partial removal is not reported as a finished uninstall.
 

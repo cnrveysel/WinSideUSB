@@ -6,7 +6,9 @@ param(
     [ValidateSet('Signed', 'Development', 'Release')][string]$DriverMode = 'Signed',
     [string]$CertificatePath = '',
     [string]$InstallDir = '',
-    [string]$ServicePath = ''
+    [string]$ServicePath = '',
+    [switch]$TrustDriverPublisher,
+    [switch]$NonInteractive
 )
 
 # Inno may inherit another PowerShell edition's PSModulePath. Prefer this
@@ -23,7 +25,7 @@ try {
     Import-Module (Join-Path $PSScriptRoot 'Setup-DriverSupport.psm1') -Force
     $StatePath = [IO.Path]::GetFullPath($StatePath)
     $logPath = Initialize-SetupLog $StatePath $Action
-    $result = Invoke-SetupDriverAction $Action $PackageDir $StatePath $DriverMode $CertificatePath $InstallDir $ServicePath
+    $result = Invoke-SetupDriverAction $Action $PackageDir $StatePath $DriverMode $CertificatePath $InstallDir $ServicePath -TrustDriverPublisher:$TrustDriverPublisher -NonInteractive:$NonInteractive
     $exitCode = $result.ExitCode
     $message = $result.Message
 } catch {

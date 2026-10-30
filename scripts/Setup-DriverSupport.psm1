@@ -2,6 +2,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $script:HardwareId = 'Root\WinSideUSBVirtualDisplay'
 $script:LogPath = ''
+$script:SignedPublisherThumbprint = '3CF8CF26D8BA266C3A483AB7D26D4A818E317D76'
 $script:SignedVendorHashes = @{
     'MttVDD.inf' = '550D211FE481E74DFE3F9D724ED78BE48B3A9113405965D683D9373E8D672F5D'
     'MttVDD.dll' = 'C9CA837F57A98FBD43BC416A7F535A95843626E7759EAF85CF0CD7CE334DBB05'
@@ -406,6 +407,10 @@ function Test-SetupPackage([string]$PackageDir, [string]$DriverMode = 'Signed', 
             throw 'The release driver catalog must have a valid trusted release signature. A self-signed development certificate cannot be used for a release installer.'
         }
         if ($DriverMode -eq 'Signed' -and (Get-AuthenticodeSignature -LiteralPath $dll).Status -ne 'Valid') { throw 'The upstream driver DLL must retain its trusted Authenticode signature.' }
+        if ($DriverMode -eq 'Signed') {
+            if ($signature.SignerCertificate.Thumbprint -ne $script:SignedPublisherThumbprint) { throw 'The upstream driver publisher certificate differs from the reviewed package.' }
+            $certificate = $signature.SignerCertificate
+        }
     } else {
         if (-not $SkipMachineChecks) {
             $security = Get-SetupSecurityState
@@ -476,6 +481,15 @@ function Invoke-SetupPnpUtil([string[]]$Arguments) {
 }
 
 function Test-SetupCertificatePresent([string]$Store, [string]$Thumbprint) { return Test-Path -LiteralPath "Cert:\LocalMachine\$Store\$Thumbprint" }
+function Assert-SetupPublisherChoice($Package, [bool]$TrustDriverPublisher, [bool]$NonInteractive) {
+    if (-not $TrustDriverPublisher -and -not $NonInteractive) { return }
+    if (-not $Package.Certificate -or $Package.Certificate.Thumbprint -ne $script:SignedPublisherThumbprint) {
+        throw 'Automatic publisher trust requires the exact reviewed, trusted-signature driver certificate.'
+    }
+    if ($NonInteractive -and -not $TrustDriverPublisher -and -not (Test-SetupCertificatePresent 'TrustedPublisher' $Package.Certificate.Thumbprint)) {
+        throw 'The driver publisher has not been approved on this PC. Run setup interactively and approve the publisher, or explicitly select the publisher-trust option (/TRUSTDISPLAYPUBLISHER=1 for unattended setup).'
+    }
+}
 function Add-SetupCertificate([string]$Store, $Certificate) {
     $certificateStore = New-Object Security.Cryptography.X509Certificates.X509Store($Store, 'LocalMachine')
     try { $certificateStore.Open('ReadWrite'); $certificateStore.Add($Certificate) } finally { $certificateStore.Close() }
@@ -857,9 +871,9 @@ function Remove-SetupOwnedResources($State, [string]$StatePath, [string[]]$Devic
     return [pscustomobject]@{ Reboot = $reboot; Errors = @($errors.ToArray()) }
 }
 
-function Invoke-SetupDriverAction([string]$Action, [string]$PackageDir, [string]$StatePath, [string]$DriverMode = 'Signed', [string]$CertificatePath = '', [string]$InstallDir = '', [string]$ServicePath = '') {
+function Invoke-SetupDriverAction([string]$Action, [string]$PackageDir, [string]$StatePath, [string]$DriverMode = 'Signed', [string]$CertificatePath = '', [string]$InstallDir = '', [string]$ServicePath = '', [switch]$TrustDriverPublisher, [switch]$NonInteractive) {
     if ($Action -eq 'Check') {
-        $null = Test-SetupPackage $PackageDir $DriverMode $CertificatePath
+        $checkedPackage = Test-SetupPackage $PackageDir $DriverMode $CertificatePath
         if ($DriverMode -eq 'Signed') {
             $installedStatePath = Get-SetupInstalledStatePath
             $installedState = New-SetupState
@@ -871,6 +885,7 @@ function Invoke-SetupDriverAction([string]$Action, [string]$PackageDir, [string]
             Assert-SetupExclusiveMttState $installedState
             if (-not $ServicePath -or -not (Test-Path -LiteralPath $ServicePath -PathType Leaf)) { throw 'The setup display service payload is missing.' }
             Assert-SetupInstallLocation $InstallDir
+            Assert-SetupPublisherChoice $checkedPackage $TrustDriverPublisher $NonInteractive
         }
         return [pscustomobject]@{ ExitCode = 0; Message = 'Driver prerequisites and signed package checks passed.' }
     }
@@ -912,6 +927,7 @@ function Invoke-SetupDriverAction([string]$Action, [string]$PackageDir, [string]
     $package = Test-SetupPackage $PackageDir $DriverMode $CertificatePath
     if ($DriverMode -eq 'Signed') {
         Assert-SetupExclusiveMttState $state
+        Assert-SetupPublisherChoice $package $TrustDriverPublisher $NonInteractive
         # Migrate only resources recorded as owned by the previous development
         # installer. Untracked sample devices and certificates remain untouched.
         if (($state.DriverMode -and $state.DriverMode -ne 'Signed') -or $state.PendingRemovalBootId) {
@@ -941,6 +957,12 @@ function Invoke-SetupDriverAction([string]$Action, [string]$PackageDir, [string]
                     $state.Certificates += $owned; $newCertificates += $owned; Save-SetupState $state $StatePath
                 }
             }
+        }
+        if ($DriverMode -eq 'Signed' -and $TrustDriverPublisher -and -not (Test-SetupCertificatePresent 'TrustedPublisher' $package.Certificate.Thumbprint)) {
+            Add-SetupCertificate 'TrustedPublisher' $package.Certificate
+            $owned = [pscustomobject]@{ Store = 'TrustedPublisher'; Thumbprint = $package.Certificate.Thumbprint }
+            $state.Certificates += $owned; $newCertificates += $owned; Save-SetupState $state $StatePath
+            Write-SetupLog 'The user-selected driver publisher certificate was added to TrustedPublisher. No root certificate was added.'
         }
         $before = Get-SetupPublishedInf $package.InfPath
         $reboot = (Invoke-SetupPnpUtil @('/add-driver', $package.InfPath)) -or $reboot

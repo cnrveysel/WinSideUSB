@@ -9,7 +9,7 @@
   #error AppleInstallerSHA256 must be supplied by Build-Setup.ps1
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.3.11"
+  #define AppVersion "0.3.12"
 #endif
 #ifndef DriverMode
   #define DriverMode "Signed"
@@ -83,6 +83,14 @@ turkish.AppleRequired=Apple USB desteği eksik. Geri dönüp Apple USB desteği 
 english.AppleRequired=Apple USB support is missing. Go back and enable the Apple USB support option so setup can prepare it for you.
 turkish.PrerequisiteProgress=Gerekli Windows ve Apple USB bileşenleri hazırlanıyor. Bu işlem birkaç dakika sürebilir...
 english.PrerequisiteProgress=Preparing Windows and Apple USB components. This can take several minutes...
+turkish.PublisherTitle=Ekran sürücüsü yayıncısı
+english.PublisherTitle=Display driver publisher
+turkish.PublisherDescription=Windows ilk kurulumda SignPath Foundation yayıncısı için onay isteyebilir.
+english.PublisherDescription=Windows can request approval for SignPath Foundation on the first installation.
+turkish.PublisherNotice=İsterseniz aşağıdaki seçeneği işaretleyerek sürücüyü otomatik kurabilirsiniz.%n%nBu seçim, doğrulanan yayıncı sertifikasını bu bilgisayardaki güvenilen yayıncılara ekler; aynı sertifikayla imzalanmış diğer sürücülerin onayını da etkiler. Önceden var olan kayıtlar korunur. WinSideUSB'nin eklediği kayıt, kaldırma sırasında başka bir sürücü kullanmıyorsa temizlenir.%n%nSeçmezseniz Windows'un yayıncı onayını kendiniz verirsiniz.
+english.PublisherNotice=You can select the option below to install the driver automatically.%n%nThis adds the verified signing certificate to trusted publishers on this PC; it also affects approval for other drivers signed with the same certificate. Existing trust is preserved. Trust added by WinSideUSB is removed on uninstall when no other driver uses it.%n%nLeave it unchecked to approve the publisher in Windows yourself.
+turkish.PublisherOption=SignPath Foundation yayıncısına bu bilgisayarda güven
+english.PublisherOption=Trust SignPath Foundation on this PC
 turkish.DesktopShortcut=Masaüstü kısayolu oluştur
 english.DesktopShortcut=Create a desktop shortcut
 turkish.LaunchApp=WinSideUSB'yi aç
@@ -144,6 +152,7 @@ var
   DriverInstalled, Finalized, Finished, HadState, RestartRequired: Boolean;
   AppleButton: TNewButton;
   AppleDownloadPage: TDownloadWizardPage;
+  PublisherPage: TInputOptionWizardPage;
 
 function StatePath: String;
 begin
@@ -168,6 +177,10 @@ begin
     PackageDir + '" -StatePath "' + State + '" -DriverMode {#DriverMode}';
 #if DriverMode == "Signed"
   Params := Params + ' -InstallDir "' + ExpandConstant('{app}') + '"';
+  if (Action = 'Check') or (Action = 'Install') then begin
+    if PublisherPage.Values[0] then Params := Params + ' -TrustDriverPublisher';
+    if WizardSilent then Params := Params + ' -NonInteractive';
+  end;
   if (Action = 'Check') or (Action = 'Install') then
     Params := Params + ' -ServicePath "' + ExpandConstant('{tmp}\driver-tools\WinSideUSBDisplayService.exe') + '"'
   else
@@ -234,6 +247,11 @@ begin
   AppleButton.OnClick := @OpenAppleSupport;
   AppleDownloadPage := CreateDownloadPage(CustomMessage('AppleDownloadTitle'), CustomMessage('AppleDownloadDescription'), nil);
   AppleDownloadPage.ShowBaseNameInsteadOfUrl := True;
+#if DriverMode == "Signed"
+  PublisherPage := CreateInputOptionPage(wpSelectTasks, CustomMessage('PublisherTitle'), CustomMessage('PublisherDescription'), CustomMessage('PublisherNotice'), False, False);
+  PublisherPage.Add(CustomMessage('PublisherOption'));
+  PublisherPage.Values[0] := ExpandConstant('{param:TRUSTDISPLAYPUBLISHER|0}') = '1';
+#endif
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;

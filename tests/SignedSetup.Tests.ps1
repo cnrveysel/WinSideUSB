@@ -12,6 +12,7 @@ InModuleScope Setup-DriverSupport {
             $script:devices = @(); $script:enabled = $false; $script:published = ''
             $script:bindFails = $false; $script:disableFails = $false; $script:bindReboot = $false
             $script:removeReboot = $false; $script:bootId = 'BOOT-1'; $script:LogPath = ''
+            $script:publisherTrusted = $false
             Mock Assert-SetupAdministrator {}
             Mock Protect-SetupStateFolder {}
             Mock Assert-SetupInstallLocation {}
@@ -52,6 +53,8 @@ InModuleScope Setup-DriverSupport {
             Mock Remove-SetupDevice { $script:devices = @(); $script:removeReboot }
             Mock Add-SetupCertificate { throw 'Signed setup must never import a certificate.' }
             Mock Remove-SetupCertificate { throw 'Signed setup has no imported certificate.' }
+            Mock Test-SetupCertificatePresent { $Store -eq 'TrustedPublisher' -and $script:publisherTrusted }
+            Mock Test-SetupCertificateInUse { $false }
             Mock Start-Sleep {}
         }
         It 'checks the signed package without creating a device or changing trust' {
@@ -86,6 +89,60 @@ InModuleScope Setup-DriverSupport {
             (Read-SetupState $script:statePath).DeviceIds.Count | Should Be 1
             Assert-MockCalled New-SetupDevice -Times 1 -Exactly -Scope It
             Assert-MockCalled Disable-SetupDevice -Times 2 -Exactly -Scope It
+        }
+        It 'adds only the reviewed publisher leaf after explicit selection and records ownership' {
+            Mock Test-SetupPackage { [pscustomobject]@{ InfPath='X:\payload\MttVDD.inf'; Certificate=[pscustomobject]@{Thumbprint='3CF8CF26D8BA266C3A483AB7D26D4A818E317D76'} } }
+            Mock Add-SetupCertificate { $script:publisherTrusted=$true }
+            $null=Invoke-SetupDriverAction Install 'X:\payload' $script:statePath Signed -TrustDriverPublisher -NonInteractive
+            $state=Read-SetupState $script:statePath
+            $state.Certificates.Count | Should Be 1
+            $state.Certificates[0].Store | Should Be 'TrustedPublisher'
+            Assert-MockCalled Add-SetupCertificate -Scope It -Times 1 -Exactly -ParameterFilter {$Store -eq 'TrustedPublisher'}
+            Assert-MockCalled Add-SetupCertificate -Scope It -Times 0 -Exactly -ParameterFilter {$Store -eq 'Root'}
+            $null=Invoke-SetupDriverAction Install 'X:\payload' $script:statePath Signed -TrustDriverPublisher -NonInteractive
+            (Read-SetupState $script:statePath).Certificates.Count | Should Be 1
+            Assert-MockCalled Add-SetupCertificate -Scope It -Times 1 -Exactly
+        }
+        It 'preserves pre-existing publisher trust rather than claiming ownership' {
+            Mock Test-SetupPackage { [pscustomobject]@{ InfPath='X:\payload\MttVDD.inf'; Certificate=[pscustomobject]@{Thumbprint='3CF8CF26D8BA266C3A483AB7D26D4A818E317D76'} } }
+            $script:publisherTrusted=$true
+            $null=Invoke-SetupDriverAction Install 'X:\payload' $script:statePath Signed -TrustDriverPublisher -NonInteractive
+            (Read-SetupState $script:statePath).Certificates.Count | Should Be 0
+            $null=Invoke-SetupDriverAction Uninstall '' $script:statePath
+            Assert-MockCalled Add-SetupCertificate -Scope It -Times 0 -Exactly
+            Assert-MockCalled Remove-SetupCertificate -Scope It -Times 0 -Exactly
+        }
+        It 'rejects a different signing certificate before adding trust or creating devices' {
+            Mock Test-SetupPackage { [pscustomobject]@{ InfPath='X:\payload\MttVDD.inf'; Certificate=[pscustomobject]@{Thumbprint=('A'*40)} } }
+            {Invoke-SetupDriverAction Install 'X:\payload' $script:statePath Signed -TrustDriverPublisher} | Should Throw 'exact reviewed'
+            Assert-MockCalled Add-SetupCertificate -Scope It -Times 0 -Exactly
+            Assert-MockCalled New-SetupDevice -Scope It -Times 0 -Exactly
+        }
+        It 'fails a silent unapproved publisher at the read-only check instead of waiting for Windows UI' {
+            Mock Test-SetupPackage { [pscustomobject]@{ InfPath='X:\payload\MttVDD.inf'; Certificate=[pscustomobject]@{Thumbprint='3CF8CF26D8BA266C3A483AB7D26D4A818E317D76'} } }
+            {Invoke-SetupDriverAction Check 'X:\payload' $script:statePath Signed '' 'C:\Program Files\WinSideUSB' $script:servicePayload -NonInteractive} | Should Throw 'publisher has not been approved'
+            Assert-MockCalled Add-SetupCertificate -Scope It -Times 0 -Exactly
+            Assert-MockCalled Invoke-SetupPnpUtil -Scope It -Times 0 -Exactly
+            (Test-Path $script:statePath) | Should Be $false
+        }
+        It 'removes only publisher trust introduced by this setup after its driver is removed' {
+            Mock Test-SetupPackage { [pscustomobject]@{ InfPath='X:\payload\MttVDD.inf'; Certificate=[pscustomobject]@{Thumbprint='3CF8CF26D8BA266C3A483AB7D26D4A818E317D76'} } }
+            Mock Add-SetupCertificate { $script:publisherTrusted=$true }
+            Mock Remove-SetupCertificate { $script:publisherTrusted=$false }
+            $null=Invoke-SetupDriverAction Install 'X:\payload' $script:statePath Signed -TrustDriverPublisher
+            $null=Invoke-SetupDriverAction Uninstall '' $script:statePath
+            (Read-SetupState $script:statePath).Certificates.Count | Should Be 0
+            $script:publisherTrusted | Should Be $false
+            Assert-MockCalled Remove-SetupCertificate -Scope It -Times 1 -Exactly -ParameterFilter {$Store -eq 'TrustedPublisher'}
+        }
+        It 'rolls back its newly selected publisher trust when first installation fails' {
+            Mock Test-SetupPackage { [pscustomobject]@{ InfPath='X:\payload\MttVDD.inf'; Certificate=[pscustomobject]@{Thumbprint='3CF8CF26D8BA266C3A483AB7D26D4A818E317D76'} } }
+            Mock Add-SetupCertificate { $script:publisherTrusted=$true }
+            Mock Remove-SetupCertificate { $script:publisherTrusted=$false }
+            $script:bindFails=$true
+            {Invoke-SetupDriverAction Install 'X:\payload' $script:statePath Signed -TrustDriverPublisher} | Should Throw 'Binding failed'
+            $script:publisherTrusted | Should Be $false
+            Assert-MockCalled Remove-SetupCertificate -Scope It -Times 1 -Exactly
         }
         It 'rolls back the new node and configuration if binding fails' {
             $script:bindFails = $true

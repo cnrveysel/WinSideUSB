@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version = '0.3.11',
+    [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version = '0.3.12',
     [ValidateSet('Signed', 'Release', 'Development')][string]$DriverMode = 'Signed',
     [string]$AppPath,
     [string]$ServicePath,
