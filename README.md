@@ -8,6 +8,8 @@ The primary tested target is an iPad Pro 12.9-inch M2-class display at `2732x204
 
 ## Download
 
+[**Download Windows setup (x64)**](https://github.com/cnrveysel/WinSideUSB/releases/download/v0.3.11/WinSideUSB-0.3.11-Setup.exe)
+
 The Windows setup is **0.3.11**, paired with the unchanged video-only **iPad 1.1 (5)** client. Download the installer and SHA-256 checksum from [the 0.3.11 release](https://github.com/cnrveysel/WinSideUSB/releases/tag/v0.3.11). GitHub's **Code → Download ZIP** contains source code; the installer is under release **Assets**.
 
 Run setup, keep the prerequisite options enabled and finish installation. Setup installs the app, driver, service, Visual C++ runtime and shortcuts. Missing Apple USB support is downloaded from Apple and installed as Apple Mobile Device Support; missing Windows N media components are prepared through Windows Update. Internet is required for those downloads; a requested restart must finish before the app opens. See [setup behavior and validation](docs/RELEASE_0.3.11.md).

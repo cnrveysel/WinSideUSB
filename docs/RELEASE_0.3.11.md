@@ -18,6 +18,8 @@ The reviewed Apple installer was actually downloaded from Apple's pinned URL; it
 
 The manual-dispatch workflow additionally runs a real Apple USB MSI installation and service-start smoke test on a disposable Windows Server 2025 runner, saving logs. This tests the Apple dependency chain; it does not establish Windows 11 display-driver or physical iPad compatibility. See the latest [workflow runs](https://github.com/cnrveysel/WinSideUSB/actions/workflows/checks.yml) for execution results.
 
+On 30 October 2026, [all three hosted jobs passed](https://github.com/cnrveysel/WinSideUSB/actions/runs/40977443018): Windows native/IPC/EDID checks and 66 setup tests, Swift helpers, and the real Apple USB installation. The Apple test began without installed USB support, verified/extracted the actual Apple package, installed the MSI and confirmed its service was running. Its [installer logs and readiness record](https://github.com/cnrveysel/WinSideUSB/actions/runs/40977443018/artifacts/12942963415) are retained as build evidence. The local Windows installer also compiled successfully; its welcome/terms text was inspected in a non-installing preview.
+
 Clean Windows 11 / Windows 11 N installation, reboot, uninstall and physical USB streaming still need the machine matrix in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md). WinSideUSB's app and setup remain unsigned; the upstream display driver is trusted-signed. The standalone macOS transport finding remains documented in [CI.md](CI.md).
 
 The installer, its checksum and the manifest under release Assets belong to the exact versioned source. Source ZIP/TAR archives do not include a built Windows setup.
