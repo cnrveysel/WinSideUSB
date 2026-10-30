@@ -11,9 +11,9 @@ Hedef: iPad'i USB üzerinden ikinci ekran ve Apple Pencil ile yazılabilen bir �
 - Windows uygulaması sanal ekran oluşturuyor, görüntüyü H.264 ile USB üzerinden iPad'e gönderiyor.
 - Windows arayüzü ve Swift iPad görüntüleyicisi mevcut.
 - Tek setup EXE için Inno Setup kaynağı ve paketleme scripti eklendi; uygulama, sürücü, Visual C++ runtime ve kayıtlı kaldırıcı birlikte paketleniyor.
-- Yeni setup sürücü/sertifika sahipliğini kaydediyor; kurulum ve kaldırma kendi cihaz/paket kimliklerini kullanıyor. Temiz bilgisayarda kurulum, yükseltme ve tam kaldırma testleri bekliyor.
+- Yeni setup sürücü/sertifika sahipliğini kaydediyor; kurulum ve kaldırma kendi cihaz/paket kimliklerini kullanıyor. Temiz Windows 11 x64 VM’de kurulum, aynı sürüm üzerine kurulum, yeniden kurulum ve tam kaldırma geçti; fiziksel donanım kapsamı ayrıca test edilecek.
 - Önceki ZIP/CMD/PowerShell geliştirici önizlemesi ayrı bir eski kurulum akışı olarak duruyor; kaldırma scriptinin kurulu dizine kopyalanması düzeltildi, eski kurulumun gerçek kaldırma testi bekliyor.
-- Apple Mobile Device Service eksikse 0.3.11 setup'ı Apple'ın resmi iTunes paketini ilerleme ekranıyla indiriyor, sabit SHA-256 ve güvenilen Apple imzasını doğrulayıp içindeki Apple Mobile Device Support MSI paketini ayrıca doğrulayarak kuruyor; iTunes uygulaması kurulmuyor. Windows N medya bileşenleri de hazırlanıyor. Gerçek temiz Windows kurulum testi bekliyor.
+- Apple Mobile Device Service eksikse 0.3.12 setup'ı Apple'ın resmi iTunes paketini ilerleme ekranıyla indiriyor, sabit SHA-256 ve güvenilen Apple imzasını doğrulayıp içindeki Apple Mobile Device Support MSI paketini ayrıca doğrulayarak kuruyor; iTunes uygulaması kurulmuyor. Windows N medya bileşenleri de hazırlanıyor. Temiz Windows 11 VM’de gerçek kurulum geçti; Windows N testi bekliyor.
 - Varsayılan Signed setup, değiştirilmeyen hazır imzalı Virtual Display Driver x64 paketini kullanıyor. iPad istemcisi bağlanana kadar sanal cihaz kapalı tutuluyor; bağlantı bitince arka plan hizmeti kapatıyor. Kendi geliştirme sürücümüzün test imzalı akışı ayrıca duruyor.
 - Apple Pencil olaylarını yakalayan ve Windows'a ileten bir giriş sistemi henüz yok.
 
@@ -40,11 +40,12 @@ Hedef: iPad'i USB üzerinden ikinci ekran ve Apple Pencil ile yazılabilen bir �
 - [x] Visual C++ x64 runtime kurulumunu pakete eklemek; uygulama kaldırılırken ortak runtime'ı korumak.
 - [x] Apple Mobile Device Service'i algılamak; eksikse resmi Apple Devices/iTunes kurulum yönlendirmesi göstermek ve eksik ön koşulu başarılı kurulum gibi sunmamak.
 - [x] Apple USB desteği eksikse resmi sunucudan doğrulanmış Apple paketi indirme ve yalnız USB bileşenini kurma akışını, Apple koşulları seçeneğini ve yeniden başlatma yönetimini setup'a eklemek; Apple kurucusunu kendi paketimizde yeniden dağıtmamak.
-- [ ] Apple desteği olmayan gerçek temiz Windows 11 ve Windows N sistemlerinde yeni otomatik bağımlılık akışını doğrulamak.
+- [x] Apple desteği olmayan temiz Windows 11 x64 VM’de gerçek otomatik bağımlılık kurulumunu doğrulamak (0.3.12).
+- [ ] Windows N sisteminde medya bileşeni kurulumunu doğrulamak.
 - [ ] Gömülü üçüncü taraf dosyaların sürüm/kaynak envanterini ve tüm dağıtım lisansı/bildirimlerini yayın öncesi tamamlamak.
 - [x] Development ve Release setup paketlerini ayırmak; Release yolunda uygulama/DLL/CAT güvenilen imzalarını ve setup/kaldırıcı imzalamasını zorunlu tutmak. Development pakette test-signing/Secure Boot ayarlarını değiştirmeden mevcut koşulları denetlemek.
 - [ ] x64 UMDF/IDD sürücü paketi için güvenilen ticari release imzası yolunu doğrulamak; Microsoft WHQL imzalama seçeneğini hedef platformlara göre değerlendirmek. Uygulama ve setup EXE için kod imzalamayı hazırlamak.
-- [ ] Normal sürümün Secure Boot açıkken, test-signing açmadan kurulmasını doğrulamak. Test imzalı geliştirme paketini ayrı tutmak.
+- [x] Normal sürümün Secure Boot açıkken, test-signing açmadan temiz Windows 11 x64 VM’de kurulmasını ve sürücünün yüklenmesini doğrulamak (0.3.12).
 - [x] Hazır imzalı MIT lisanslı sanal ekran paketini değiştirmeden doğrulayıp Signed setup'a entegre etmek; kendi imza sertifikamızı zorunlu tutmamak.
 - [x] İkinci ekranı yalnız USB iPad istemcisi bağlantısı sırasında açmak; durdurma, bağlantı kopması, uygulama kapanması ve hizmet oturum kaybında kapatan akış eklemek.
 - [x] Mevcut iPad piksel/Hz listesini korumak, tam modu doğrulamak ve sanal ekranı tüm GPU'larda cihaz kimliğiyle bulmak.
@@ -56,9 +57,9 @@ Hedef: iPad'i USB üzerinden ikinci ekran ve Apple Pencil ile yazılabilen bir �
 
 **Tamamlanma ölçütü:** Desteklenen temiz Windows 11 x64 sisteminde tek EXE ile uygulama, sürücü ve gerekli Windows bağımlılıkları kuruluyor. Kullanıcı yönetici izni ve gerekiyorsa yeniden başlatma dışında elle sürücü kurmuyor. Apple USB yazılımının eksik olduğu sistemler için de doğrulanmış bir edinme/kurulum yolu var. Üretim sürümü Secure Boot açıkken çalışıyor.
 
-**Uygulanan paketleme akışı:** `scripts/Build-Setup.ps1` ve `installer/WinSideUSB.iss`. Varsayılan Signed çıktı `WinSideUSB-{sürüm}-Setup.exe`, hazır imzalı sürücü ve ekran hizmetini içeriyor. Development/Release akışları ayrı duruyor. Kurulum/kaldırma rehberi: [docs/SETUP.md](docs/SETUP.md), ekran ömrü ve sınırları: [docs/SIGNED_DISPLAY.md](docs/SIGNED_DISPLAY.md). İşaretler uygulanan kod akışını gösteriyor; temiz bilgisayar ve gerçek iPad testleri bekliyor.
+**Uygulanan paketleme akışı:** `scripts/Build-Setup.ps1` ve `installer/WinSideUSB.iss`. Varsayılan Signed çıktı `WinSideUSB-{sürüm}-Setup.exe`, hazır imzalı sürücü ve ekran hizmetini içeriyor. Development/Release akışları ayrı duruyor. Kurulum/kaldırma rehberi: [docs/SETUP.md](docs/SETUP.md), ekran ömrü ve sınırları: [docs/SIGNED_DISPLAY.md](docs/SIGNED_DISPLAY.md). İşaretler uygulanan kod akışını gösteriyor; temiz Windows 11 VM kurulum/kaldırma testleri geçti; fiziksel iPad ve donanım matrisi bekliyor.
 
-**Bağımlılık:** Varsayılan paket için hazır imzalı sürücü seçildi ve dosya/imza kontrolleri tamamlandı. Bu aşamanın kalan koşulu, Secure Boot açık ve test modu kapalı temiz bir bilgisayarda gerçek kurulum, iPad bağlantısı ve kaldırmayı doğrulamak.
+**Bağımlılık:** Varsayılan paket için hazır imzalı sürücü seçildi ve dosya/imza kontrolleri tamamlandı. Secure Boot açık temiz Windows 11 VM’de gerçek kurulum ve kaldırma geçti. Fiziksel iPad bağlantısı ve diğer donanımlar için doğrulama devam edecek.
 
 **İmza ayrımı:** Sürücümüz kullanıcı modunda çalışan UMDF/IDD'dir. Microsoft'un PnP kuralları, normal x64 Windows için WHQL yanında güvenilen üçüncü taraf release sertifikasıyla imzalanmış paketleri de kabul ediyor. Bu nedenle tüm hedefler için baştan Microsoft imzasını zorunlu saymıyoruz. Seçilen imzalama yolu, kendi DLL/CAT paketimizle Secure Boot açık ve test-signing kapalı temiz sistemlerde doğrulanacak. S mode ve ARM64 gibi hedeflerin ek koşulları ayrıca değerlendirilecek. Kaynaklar: [Microsoft PnP imza koşulları](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/pnp-device-installation-signing-requirements--windows-vista-and-later-), [IDD modeli](https://learn.microsoft.com/en-us/windows-hardware/drivers/display/indirect-display-driver-model-overview).
 

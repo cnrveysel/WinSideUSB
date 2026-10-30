@@ -62,4 +62,6 @@ The actual local setup attempt revealed two further packaging problems. Publishe
 
 Setup 0.3.4 fixes ordinary-user broker validation: the client now matches the actual pipe server PID to the running own-process LocalSystem service and its exact quoted installed executable through SCM. It no longer needs to open the LocalSystem process, which returned Access Denied on this host. Eight identity regression checks and an opt-in read-only check against the real installed service pass as an ordinary user, alongside the 39 existing native IPC/lifetime checks (48 total with the opt-in check). The opt-in check sends no device requests. Launching the build-directory EXE now explains that the installed Start menu app is required.
 
+Setup 0.3.12 completed real installation, driver loading (Code 0), idle disable (Code 22), normal app launch, uninstall, reinstall and same-version upgrade in a clean Windows 11 x64 VM with Secure Boot on. An explicit publisher-trust choice resolves the first-install Windows consent prompt; introduced trust is removed only when no driver needs it. See [the measured scope and evidence](RELEASE_0.3.12.md).
+
 See [SETUP.md](SETUP.md) and [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).

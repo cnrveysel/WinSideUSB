@@ -1,5 +1,7 @@
 # GitHub Release Checklist
 
+The [0.3.12 Windows 11 VM report](RELEASE_0.3.12.md) records completed fresh installation, driver loading, ordinary app launch, two uninstall/reboot checks, reinstall and same-version upgrade. The physical iPad/GPU and Windows N matrix below remains separate.
+
 ## Before The First Push
 
 - Decide whether the repository is private or public.

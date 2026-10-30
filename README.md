@@ -8,11 +8,11 @@ The primary tested target is an iPad Pro 12.9-inch M2-class display at `2732x204
 
 ## Download
 
-[**Download Windows setup (x64)**](https://github.com/cnrveysel/WinSideUSB/releases/download/v0.3.11/WinSideUSB-0.3.11-Setup.exe)
+[**Download Windows setup (x64)**](https://github.com/cnrveysel/WinSideUSB/releases/download/v0.3.12/WinSideUSB-0.3.12-Setup.exe)
 
-The Windows setup is **0.3.11**, paired with the unchanged video-only **iPad 1.1 (5)** client. Download the installer and SHA-256 checksum from [the 0.3.11 release](https://github.com/cnrveysel/WinSideUSB/releases/tag/v0.3.11). GitHub's **Code → Download ZIP** contains source code; the installer is under release **Assets**.
+The Windows setup is **0.3.12**, paired with the unchanged video-only **iPad 1.1 (5)** client. Download the installer and SHA-256 checksum from [the 0.3.12 release](https://github.com/cnrveysel/WinSideUSB/releases/tag/v0.3.12). GitHub's **Code → Download ZIP** contains source code; the installer is under release **Assets**.
 
-Run setup, keep the prerequisite options enabled and finish installation. Setup installs the app, driver, service, Visual C++ runtime and shortcuts. Missing Apple USB support is downloaded from Apple and installed as Apple Mobile Device Support; missing Windows N media components are prepared through Windows Update. Internet is required for those downloads; a requested restart must finish before the app opens. See [setup behavior and validation](docs/RELEASE_0.3.11.md).
+Run setup and keep the prerequisite options enabled. Select the explicit **Trust SignPath Foundation on this PC** option for automatic driver installation, or approve Windows' publisher prompt yourself. Setup installs the app, driver, service, Visual C++ runtime and shortcuts. Missing Apple USB support is downloaded from Apple and installed as Apple Mobile Device Support; missing Windows N media components are prepared through Windows Update. Internet is required for those downloads; a requested restart must finish before the app opens. See [the clean Windows 11 test results](docs/RELEASE_0.3.12.md).
 
 The Windows video app and iPad client keep the display profiles, USB reconnect handling and 120 Hz diagnostics of the [0.3.10 baseline](docs/RELEASE_0.3.10.md). iPad app distribution remains separate; client source is included, and an iPad app build needs your own Apple signing.
 
@@ -20,7 +20,7 @@ The Windows video app and iPad client keep the display profiles, USB reconnect h
 
 This is a personal research project. It is not production-ready commercial display software yet.
 
-The fastest path is designed for NVIDIA GPUs with NVENC, but the app also has Windows Media Foundation hardware/software fallback paths for non-NVIDIA systems. The default single-EXE setup uses the unchanged, trusted-signed x64 [Virtual Display Driver 25.7.23](https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/tag/25.7.23), a small display service, and the Visual C++ runtime. This package does not require test-signing or disabling Secure Boot. Installed-app USB streaming and exact display modes have been checked on the development machine; clean-PC installation/removal and other hardware remain to be tested. See [docs/SIGNED_DISPLAY.md](docs/SIGNED_DISPLAY.md) and [docs/SETUP.md](docs/SETUP.md).
+The fastest path is designed for NVIDIA GPUs with NVENC, but the app also has Windows Media Foundation hardware/software fallback paths for non-NVIDIA systems. The default single-EXE setup uses the unchanged, trusted-signed x64 [Virtual Display Driver 25.7.23](https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/tag/25.7.23), a small display service, and the Visual C++ runtime. This package does not require test-signing or disabling Secure Boot. Installed-app USB streaming and exact display modes have been checked on the development machine; clean Windows 11 VM installation/removal is now verified. Other physical hardware remains to be tested. See [docs/SIGNED_DISPLAY.md](docs/SIGNED_DISPLAY.md) and [docs/SETUP.md](docs/SETUP.md).
 
 Windows 0.3.7 improves capture frame pacing while retaining the existing display modes and iPad protocol. A controlled 120 FPS motion comparison and its measurement limits are documented in [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
@@ -34,7 +34,7 @@ Development note: WinSideUSB was built by Veysel as a personal engineering proje
 
 ## Roadmap
 
-The native Windows/iPad UI, single-EXE setup/uninstall, and ready-signed display-driver integration have been implemented. The managed display stays disabled until the iPad client connects and is disabled when that connection ends. Real-device UI checks and clean-PC installation/removal verification remain pending. Automatic provisioning of Apple's USB software and Apple Pencil writing/drawing input remain planned work.
+The native Windows/iPad UI, single-EXE setup/uninstall, ready-signed display-driver integration and automatic Apple USB provisioning have been implemented. Installation, driver loading, normal app launch, removal, reinstall and same-version upgrade passed in a clean Windows 11 x64 VM with Secure Boot on. Physical-device checks on other hardware, Windows N installation and Apple Pencil writing/drawing input remain pending.
 
 See [ROADMAP.md](ROADMAP.md) for the ordered checklist, dependencies, and completion criteria (in Turkish).
 
@@ -89,7 +89,7 @@ docs/                          Driver, iPad, troubleshooting, and release notes
 - Apple Mobile Device Service and Apple USB support. Setup reuses an existing installation, or downloads Apple's package and installs its USB component when missing and the Apple USB option is enabled.
 - Microsoft Visual C++ v14 x64 runtime; the EXE setup bundles and installs it when needed.
 - NVIDIA GPU and driver for the native NVENC path. AMD and Intel systems may use the Media Foundation fallback path, but that path is less tested and may have higher latency or lower smoothness.
-- The default **Signed** setup uses a ready-signed driver and leaves Windows security settings unchanged. The optional legacy **Development** package still requires test-signing enabled and Secure Boot disabled.
+- The default **Signed** setup uses a ready-signed driver and keeps Secure Boot/test-signing settings intact. Its explicit publisher-trust option is described above. The optional legacy **Development** package still requires test-signing enabled and Secure Boot disabled.
 
 ### Source build only
 
@@ -143,7 +143,7 @@ Maintainers build a setup with:
 
 ```powershell
 .\scripts\Get-SignedDisplayDriver.ps1
-.\scripts\Build-Setup.ps1 -Version "0.3.11" -DriverMode Signed `
+.\scripts\Build-Setup.ps1 -Version "0.3.12" -DriverMode Signed `
   -VcRedistPath "C:\Path\To\VC_redist.x64.exe"
 ```
 

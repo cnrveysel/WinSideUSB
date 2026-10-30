@@ -2,7 +2,7 @@
 
 The Windows installer packages WinSideUSB, its ready-signed virtual display driver, display service, Microsoft Visual C++ x64 runtime, documentation, license notices, and iPad client source into one executable. It creates shortcuts and a Windows **Installed apps** entry with an uninstaller.
 
-The default **Signed** mode uses the unchanged trusted-signed Virtual Display Driver 25.7.23 x64 package. It does not require test mode or disabling Secure Boot. The separate Development/Release modes retain our own-driver workflows. Installed-app USB streaming and exact display modes have been checked on the development machine; clean-PC install/uninstall and other hardware remain to be tested. See [SIGNED_DISPLAY.md](SIGNED_DISPLAY.md) for exact-mode handling, device lifetime and upstream limitations, and [PERFORMANCE.md](PERFORMANCE.md) for the Windows 0.3.7 pacing comparison.
+The default **Signed** mode uses the unchanged trusted-signed Virtual Display Driver 25.7.23 x64 package. It does not require test mode or disabling Secure Boot. The separate Development/Release modes retain our own-driver workflows. Installed-app USB streaming and exact display modes have been checked on the development machine. Clean Windows 11 VM installation, driver loading, removal and reinstall are verified in [the 0.3.12 report](RELEASE_0.3.12.md); other physical hardware remains to be tested. See [SIGNED_DISPLAY.md](SIGNED_DISPLAY.md) for exact-mode handling, device lifetime and upstream limitations, and [PERFORMANCE.md](PERFORMANCE.md) for the Windows 0.3.7 pacing comparison.
 
 ## Install On Windows
 
@@ -106,7 +106,7 @@ The setup includes the project license texts and documentation. Before publishin
 
 ## Upgrade And Uninstall
 
-Run a newer setup to upgrade the installed app. Driver operations record package and device identity so cleanup can target WinSideUSB's own installation. Error handling attempts to roll back driver changes introduced by the failed operation rather than treating a partial installation as complete. These flows still need clean-PC upgrade and failure-path testing.
+Run a newer setup to upgrade the installed app. Driver operations record package and device identity so cleanup can target WinSideUSB's own installation. Error handling attempts to roll back driver changes introduced by the failed operation rather than treating a partial installation as complete. Same-version upgrade, uninstall and reinstall passed in the [clean Windows 11 VM](RELEASE_0.3.12.md); historical-version migrations and real induced-failure recovery still need their own checks.
 
 The installed app is `%ProgramFiles%\WinSideUSB\WinSideUSB.exe`, with `driver`, `scripts`, `docs`, `licenses`, and `iPad` subdirectories beside it.
 

@@ -1,0 +1,484 @@
+{
+  "Result": {
+    "passed": true,
+    "version": "0.3.12",
+    "completedUtc": "2026-10-30T21:02:30.1971052Z",
+    "runId": "clean-0312-b",
+    "sha256": "8985D5FE4344FBA099CF63ED133B6804AA81F958C3E52175DBE9AB187FBEAF55",
+    "secureBoot": true,
+    "os": {
+      "Caption": "Microsoft Windows 11 Enterprise Evaluation",
+      "Version": "10.0.26300",
+      "BuildNumber": "26300"
+    }
+  },
+  "InitialMachine": {
+    "OS": "Microsoft Windows 11 Enterprise Evaluation",
+    "Build": "26300",
+    "Version": "10.0.26300",
+    "ProductType": 1,
+    "Computer": "WSUSBE2E26",
+    "Manufacturer": "QEMU",
+    "Model": "Standard PC (Q35 + ICH9, 2009)",
+    "SecureBoot": true,
+    "TPM": {
+      "TpmPresent": true,
+      "TpmReady": true,
+      "TpmEnabled": true
+    },
+    "Elevated": true,
+    "AppleServicePresent": false,
+    "DisplayServicePresent": false,
+    "VcRuntime": {},
+    "AppPresent": false,
+    "DisplayDevices": [
+      {
+        "InstanceId": "PCI\\VEN_1234&DEV_1111&SUBSYS_11001AF4&REV_02\\3&11583659&0&18",
+        "FriendlyName": "Microsoft Basic Display Adapter",
+        "Status": "OK"
+      }
+    ],
+    "BootConfiguration": [
+      "",
+      "Windows Boot Loader",
+      "-------------------",
+      "identifier              {current}",
+      "device                  partition=C:",
+      "path                    \\WINDOWS\\system32\\winload.efi",
+      "description             Windows 11",
+      "locale                  en-US",
+      "inherit                 {bootloadersettings}",
+      "recoverysequence        {b714a4f1-d43d-11f1-a6b3-9ac41b00c87b}",
+      "displaymessageoverride  Recovery",
+      "recoveryenabled         Yes",
+      "isolatedcontext         Yes",
+      "allowedinmemorysettings 0x15000075",
+      "osdevice                partition=C:",
+      "systemroot              \\WINDOWS",
+      "resumeobject            {b714a4ef-d43d-11f1-a6b3-9ac41b00c87b}",
+      "nx                      OptIn",
+      "bootmenupolicy          Standard"
+    ]
+  },
+  "InstallerBytes": 29316954,
+  "SourceChecks": "https://github.com/cnrveysel/WinSideUSB/actions/runs/40985641584",
+  "SetupUnitTests": {
+    "Failures": 0,
+    "Total": 72
+  },
+  "Notes": [
+    "The exact installer candidate was served locally to the isolated VM.",
+    "The event history retains a test-harness enable-command failure and a resumed phase after the WSL host stopped.",
+    "The final retry used the global/profile SetupAPI enable operation, then all remaining checks passed.",
+    "Physical iPad streaming and Windows N installation were not tested in this VM."
+  ],
+  "Events": [
+    {
+      "version": "0.3.12",
+      "details": {},
+      "runId": "clean-0312-b",
+      "name": "phase-start",
+      "phase": "first-install",
+      "time": "2026-10-30T01:31:02.9735471Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "url": "http://10.0.2.2:18081/files/WinSideUSB-0.3.12-Setup.exe"
+      },
+      "runId": "clean-0312-b",
+      "name": "download-setup",
+      "phase": "first-install",
+      "time": "2026-10-30T01:31:03.4288106Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "sha256": "8985D5FE4344FBA099CF63ED133B6804AA81F958C3E52175DBE9AB187FBEAF55",
+        "name": "first"
+      },
+      "runId": "clean-0312-b",
+      "name": "installer-start",
+      "phase": "first-install",
+      "time": "2026-10-30T01:31:05.5530006Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "name": "first",
+        "exitCode": 0
+      },
+      "runId": "clean-0312-b",
+      "name": "installer-exit",
+      "phase": "first-install",
+      "time": "2026-10-30T01:32:27.9054015Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "publishedInf": "oem2.inf",
+        "name": "first-before-reboot",
+        "device": "ROOT\\MTTVDD\\0000"
+      },
+      "runId": "clean-0312-b",
+      "name": "installed-verified",
+      "phase": "first-install",
+      "time": "2026-10-30T01:32:30.4880367Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "next": "after-first-reboot"
+      },
+      "runId": "clean-0312-b",
+      "name": "reboot-requested",
+      "phase": "after-first-reboot",
+      "time": "2026-10-30T01:32:30.6340454Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {},
+      "runId": "clean-0312-b",
+      "name": "phase-start",
+      "phase": "after-first-reboot",
+      "time": "2026-10-30T01:33:08.2803781Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "publishedInf": "oem2.inf",
+        "name": "first-after-reboot",
+        "device": "ROOT\\MTTVDD\\0000"
+      },
+      "runId": "clean-0312-b",
+      "name": "installed-verified",
+      "phase": "after-first-reboot",
+      "time": "2026-10-30T01:33:12.584842Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "problemCode": 22,
+        "device": "ROOT\\MTTVDD\\0000"
+      },
+      "runId": "clean-0312-b",
+      "name": "driver-enabled",
+      "phase": "after-first-reboot",
+      "time": "2026-10-30T01:33:17.8092357Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "message": "The installed driver could not start after reboot.",
+        "stack": "at Assert, C:\\WSTest\\LifecycleTest.ps1: line 42\r\nat Check-DriverLoad, C:\\WSTest\\LifecycleTest.ps1: line 165\r\nat <ScriptBlock>, C:\\WSTest\\LifecycleTest.ps1: line 230\r\nat <ScriptBlock>, C:\\WSTest\\command-lifecycle0312b.ps1: line 3\r\nat <ScriptBlock>, C:\\WSTest\\runner-lifecycle0312b.ps1: line 3"
+      },
+      "runId": "clean-0312-b",
+      "name": "lifecycle-failed",
+      "phase": "after-first-reboot",
+      "time": "2026-10-30T01:33:18.039413Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {},
+      "runId": "clean-0312-b",
+      "name": "phase-start",
+      "phase": "after-first-reboot",
+      "time": "2026-10-30T20:56:40.6334293Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "publishedInf": "oem2.inf",
+        "name": "first-after-reboot",
+        "device": "ROOT\\MTTVDD\\0000"
+      },
+      "runId": "clean-0312-b",
+      "name": "installed-verified",
+      "phase": "after-first-reboot",
+      "time": "2026-10-30T20:56:45.4401618Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "problemCode": 0,
+        "device": "ROOT\\MTTVDD\\0000"
+      },
+      "runId": "clean-0312-b",
+      "name": "driver-enabled",
+      "phase": "after-first-reboot",
+      "time": "2026-10-30T20:56:52.9065269Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "problemCode": 22,
+        "device": "ROOT\\MTTVDD\\0000"
+      },
+      "runId": "clean-0312-b",
+      "name": "driver-idle-restored",
+      "phase": "after-first-reboot",
+      "time": "2026-10-30T20:56:53.1452797Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "name": "first",
+        "elevated": false,
+        "pid": 9044,
+        "session": 1,
+        "responding": true,
+        "title": "WinSideUSB"
+      },
+      "runId": "clean-0312-b",
+      "name": "user-app-running",
+      "phase": "after-first-reboot",
+      "time": "2026-10-30T20:57:10.1210298Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "appWasRunning": true,
+        "name": "first"
+      },
+      "runId": "clean-0312-b",
+      "name": "uninstaller-start",
+      "phase": "after-first-reboot",
+      "time": "2026-10-30T20:57:20.1788964Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "name": "first",
+        "exitCode": 0
+      },
+      "runId": "clean-0312-b",
+      "name": "uninstaller-exit",
+      "phase": "after-first-reboot",
+      "time": "2026-10-30T20:57:40.3653822Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "next": "after-first-uninstall-reboot"
+      },
+      "runId": "clean-0312-b",
+      "name": "reboot-requested",
+      "phase": "after-first-uninstall-reboot",
+      "time": "2026-10-30T20:57:40.5845783Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {},
+      "runId": "clean-0312-b",
+      "name": "phase-start",
+      "phase": "after-first-uninstall-reboot",
+      "time": "2026-10-30T20:58:17.4737326Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "sharedApplePreserved": true,
+        "name": "first",
+        "sharedRuntimePreserved": true
+      },
+      "runId": "clean-0312-b",
+      "name": "uninstall-verified",
+      "phase": "after-first-uninstall-reboot",
+      "time": "2026-10-30T20:58:19.7602657Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "sha256": "8985D5FE4344FBA099CF63ED133B6804AA81F958C3E52175DBE9AB187FBEAF55",
+        "name": "reinstall"
+      },
+      "runId": "clean-0312-b",
+      "name": "installer-start",
+      "phase": "after-first-uninstall-reboot",
+      "time": "2026-10-30T20:58:21.1741559Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "name": "reinstall",
+        "exitCode": 0
+      },
+      "runId": "clean-0312-b",
+      "name": "installer-exit",
+      "phase": "after-first-uninstall-reboot",
+      "time": "2026-10-30T20:59:03.693666Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "next": "after-reinstall-reboot"
+      },
+      "runId": "clean-0312-b",
+      "name": "reboot-requested",
+      "phase": "after-reinstall-reboot",
+      "time": "2026-10-30T20:59:03.8690383Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {},
+      "runId": "clean-0312-b",
+      "name": "phase-start",
+      "phase": "after-reinstall-reboot",
+      "time": "2026-10-30T20:59:42.3282691Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "publishedInf": "oem2.inf",
+        "name": "reinstall",
+        "device": "ROOT\\MTTVDD\\0000"
+      },
+      "runId": "clean-0312-b",
+      "name": "installed-verified",
+      "phase": "after-reinstall-reboot",
+      "time": "2026-10-30T20:59:44.8824574Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "name": "reinstall",
+        "elevated": false,
+        "pid": 5540,
+        "session": 1,
+        "responding": true,
+        "title": "WinSideUSB"
+      },
+      "runId": "clean-0312-b",
+      "name": "user-app-running",
+      "phase": "after-reinstall-reboot",
+      "time": "2026-10-30T21:00:00.7072621Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "sha256": "8985D5FE4344FBA099CF63ED133B6804AA81F958C3E52175DBE9AB187FBEAF55",
+        "name": "same-version-upgrade"
+      },
+      "runId": "clean-0312-b",
+      "name": "installer-start",
+      "phase": "after-reinstall-reboot",
+      "time": "2026-10-30T21:00:11.4049026Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "name": "same-version-upgrade",
+        "exitCode": 0
+      },
+      "runId": "clean-0312-b",
+      "name": "installer-exit",
+      "phase": "after-reinstall-reboot",
+      "time": "2026-10-30T21:00:42.1051444Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "next": "after-upgrade-reboot"
+      },
+      "runId": "clean-0312-b",
+      "name": "reboot-requested",
+      "phase": "after-upgrade-reboot",
+      "time": "2026-10-30T21:00:42.2988911Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {},
+      "runId": "clean-0312-b",
+      "name": "phase-start",
+      "phase": "after-upgrade-reboot",
+      "time": "2026-10-30T21:01:12.2817659Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "publishedInf": "oem2.inf",
+        "name": "same-version-upgrade",
+        "device": "ROOT\\MTTVDD\\0000"
+      },
+      "runId": "clean-0312-b",
+      "name": "installed-verified",
+      "phase": "after-upgrade-reboot",
+      "time": "2026-10-30T21:01:14.3665146Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "name": "after-upgrade",
+        "elevated": false,
+        "pid": 7340,
+        "session": 1,
+        "responding": true,
+        "title": "WinSideUSB"
+      },
+      "runId": "clean-0312-b",
+      "name": "user-app-running",
+      "phase": "after-upgrade-reboot",
+      "time": "2026-10-30T21:01:30.1642599Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "appWasRunning": true,
+        "name": "final"
+      },
+      "runId": "clean-0312-b",
+      "name": "uninstaller-start",
+      "phase": "after-upgrade-reboot",
+      "time": "2026-10-30T21:01:40.2196322Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "name": "final",
+        "exitCode": 0
+      },
+      "runId": "clean-0312-b",
+      "name": "uninstaller-exit",
+      "phase": "after-upgrade-reboot",
+      "time": "2026-10-30T21:01:54.9698297Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "next": "after-final-uninstall-reboot"
+      },
+      "runId": "clean-0312-b",
+      "name": "reboot-requested",
+      "phase": "after-final-uninstall-reboot",
+      "time": "2026-10-30T21:01:55.1474105Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {},
+      "runId": "clean-0312-b",
+      "name": "phase-start",
+      "phase": "after-final-uninstall-reboot",
+      "time": "2026-10-30T21:02:27.8952155Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {
+        "sharedApplePreserved": true,
+        "name": "final",
+        "sharedRuntimePreserved": true
+      },
+      "runId": "clean-0312-b",
+      "name": "uninstall-verified",
+      "phase": "after-final-uninstall-reboot",
+      "time": "2026-10-30T21:02:29.9787756Z"
+    },
+    {
+      "version": "0.3.12",
+      "details": {},
+      "runId": "clean-0312-b",
+      "name": "lifecycle-passed",
+      "phase": "complete",
+      "time": "2026-10-30T21:02:30.5932504Z"
+    }
+  ]
+}
