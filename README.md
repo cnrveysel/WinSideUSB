@@ -10,7 +10,7 @@ The primary tested target is an iPad Pro 12.9-inch M2-class display at `2732x204
 
 The Windows setup is **0.3.11**, paired with the unchanged video-only **iPad 1.1 (5)** client. Download the installer and SHA-256 checksum from [the 0.3.11 release](https://github.com/cnrveysel/WinSideUSB/releases/tag/v0.3.11). GitHub's **Code → Download ZIP** contains source code; the installer is under release **Assets**.
 
-Run setup, keep the prerequisite options enabled and finish installation. Setup installs the app, driver, service, Visual C++ runtime and shortcuts. Missing Apple USB support is downloaded from Apple and installed through iTunes; missing Windows N media components are prepared through Windows Update. Internet is required for those downloads; a requested restart must finish before the app opens. See [setup behavior and validation](docs/RELEASE_0.3.11.md).
+Run setup, keep the prerequisite options enabled and finish installation. Setup installs the app, driver, service, Visual C++ runtime and shortcuts. Missing Apple USB support is downloaded from Apple and installed as Apple Mobile Device Support; missing Windows N media components are prepared through Windows Update. Internet is required for those downloads; a requested restart must finish before the app opens. See [setup behavior and validation](docs/RELEASE_0.3.11.md).
 
 The Windows video app and iPad client keep the display profiles, USB reconnect handling and 120 Hz diagnostics of the [0.3.10 baseline](docs/RELEASE_0.3.10.md). iPad app distribution remains separate; client source is included, and an iPad app build needs your own Apple signing.
 
@@ -84,7 +84,7 @@ docs/                          Driver, iPad, troubleshooting, and release notes
 
 - Windows 11 x64, build 22000 or later, matching the current driver INF.
 - Windows 11 N requires Microsoft's [Media Feature Pack](https://support.microsoft.com/en-us/windows/experience/platform-variants/media-feature-pack-for-windows-n); setup checks Media Foundation availability.
-- Apple Mobile Device Service and Apple USB support. Setup reuses an existing installation, or downloads and installs Apple's iTunes package when missing and the Apple USB option is enabled.
+- Apple Mobile Device Service and Apple USB support. Setup reuses an existing installation, or downloads Apple's package and installs its USB component when missing and the Apple USB option is enabled.
 - Microsoft Visual C++ v14 x64 runtime; the EXE setup bundles and installs it when needed.
 - NVIDIA GPU and driver for the native NVENC path. AMD and Intel systems may use the Media Foundation fallback path, but that path is less tested and may have higher latency or lower smoothness.
 - The default **Signed** setup uses a ready-signed driver and leaves Windows security settings unchanged. The optional legacy **Development** package still requires test-signing enabled and Secure Boot disabled.
@@ -106,7 +106,7 @@ docs/                          Driver, iPad, troubleshooting, and release notes
 
 The Windows app can embed `iproxy.exe`, `ideviceinfo.exe`, and required libimobiledevice DLLs as resources. These binaries are third-party runtime files and are not committed to the repository by default.
 
-The embedded tools need Apple's USB service and device support on Windows. The setup downloads Apple's official iTunes package only when support is missing, checks its pinned SHA-256 and trusted Apple signature, and installs it without a forced restart. It does not bundle Apple's installer or copy Apple DLLs into WinSideUSB. A source-only app build still needs Apple USB support installed separately; see Apple's [installation guidance](https://support.apple.com/en-us/118290).
+The embedded tools need Apple's USB service and device support on Windows. The setup downloads Apple's official iTunes package only when support is missing, checks its pinned SHA-256 and trusted Apple signature, then extracts and independently verifies Apple Mobile Device Support before installing that USB component without a forced restart. It does not bundle Apple's installer or copy Apple DLLs into WinSideUSB. A source-only app build still needs Apple USB support installed separately; see Apple's [installation guidance](https://support.apple.com/en-us/118290).
 
 `iproxy` comes from the libimobiledevice/libusbmuxd project. If you distribute builds that include `iproxy.exe` or libimobiledevice DLLs, include the upstream license texts and attribution notices. See [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
 

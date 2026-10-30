@@ -13,7 +13,7 @@ Hedef: iPad'i USB üzerinden ikinci ekran ve Apple Pencil ile yazılabilen bir �
 - Tek setup EXE için Inno Setup kaynağı ve paketleme scripti eklendi; uygulama, sürücü, Visual C++ runtime ve kayıtlı kaldırıcı birlikte paketleniyor.
 - Yeni setup sürücü/sertifika sahipliğini kaydediyor; kurulum ve kaldırma kendi cihaz/paket kimliklerini kullanıyor. Temiz bilgisayarda kurulum, yükseltme ve tam kaldırma testleri bekliyor.
 - Önceki ZIP/CMD/PowerShell geliştirici önizlemesi ayrı bir eski kurulum akışı olarak duruyor; kaldırma scriptinin kurulu dizine kopyalanması düzeltildi, eski kurulumun gerçek kaldırma testi bekliyor.
-- Apple Mobile Device Service eksikse 0.3.11 setup'ı Apple'ın resmi iTunes paketini ilerleme ekranıyla indiriyor, sabit SHA-256 ve güvenilen Apple imzasını doğrulayıp kuruyor. Windows N medya bileşenleri de hazırlanıyor. Gerçek temiz Windows kurulum testi bekliyor.
+- Apple Mobile Device Service eksikse 0.3.11 setup'ı Apple'ın resmi iTunes paketini ilerleme ekranıyla indiriyor, sabit SHA-256 ve güvenilen Apple imzasını doğrulayıp içindeki Apple Mobile Device Support MSI paketini ayrıca doğrulayarak kuruyor; iTunes uygulaması kurulmuyor. Windows N medya bileşenleri de hazırlanıyor. Gerçek temiz Windows kurulum testi bekliyor.
 - Varsayılan Signed setup, değiştirilmeyen hazır imzalı Virtual Display Driver x64 paketini kullanıyor. iPad istemcisi bağlanana kadar sanal cihaz kapalı tutuluyor; bağlantı bitince arka plan hizmeti kapatıyor. Kendi geliştirme sürücümüzün test imzalı akışı ayrıca duruyor.
 - Apple Pencil olaylarını yakalayan ve Windows'a ileten bir giriş sistemi henüz yok.
 
@@ -39,7 +39,7 @@ Hedef: iPad'i USB üzerinden ikinci ekran ve Apple Pencil ile yazılabilen bir �
 - [x] Yönetici iznini setup üzerinden istemek; dosya kopyalama, sanal cihaz oluşturma, sürücü kurulumu ve kısayolları otomatik yürütmek.
 - [x] Visual C++ x64 runtime kurulumunu pakete eklemek; uygulama kaldırılırken ortak runtime'ı korumak.
 - [x] Apple Mobile Device Service'i algılamak; eksikse resmi Apple Devices/iTunes kurulum yönlendirmesi göstermek ve eksik ön koşulu başarılı kurulum gibi sunmamak.
-- [x] Apple USB desteği eksikse resmi sunucudan doğrulanmış iTunes indirme/kurma akışını, Apple koşulları seçeneğini ve yeniden başlatma yönetimini setup'a eklemek; Apple kurucusunu kendi paketimizde yeniden dağıtmamak.
+- [x] Apple USB desteği eksikse resmi sunucudan doğrulanmış Apple paketi indirme ve yalnız USB bileşenini kurma akışını, Apple koşulları seçeneğini ve yeniden başlatma yönetimini setup'a eklemek; Apple kurucusunu kendi paketimizde yeniden dağıtmamak.
 - [ ] Apple desteği olmayan gerçek temiz Windows 11 ve Windows N sistemlerinde yeni otomatik bağımlılık akışını doğrulamak.
 - [ ] Gömülü üçüncü taraf dosyaların sürüm/kaynak envanterini ve tüm dağıtım lisansı/bildirimlerini yayın öncesi tamamlamak.
 - [x] Development ve Release setup paketlerini ayırmak; Release yolunda uygulama/DLL/CAT güvenilen imzalarını ve setup/kaldırıcı imzalamasını zorunlu tutmak. Development pakette test-signing/Secure Boot ayarlarını değiştirmeden mevcut koşulları denetlemek.

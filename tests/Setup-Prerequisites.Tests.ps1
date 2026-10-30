@@ -7,6 +7,8 @@ InModuleScope Setup-PrerequisitesSupport {
             Mock Test-SetupMediaFoundation { $true }
             Mock Get-SetupAppleUsbState { [pscustomobject]@{ Ready = $true } }
             Mock Test-SetupAppleUsbInstaller {}
+            Mock Expand-SetupAppleUsbPackage { 'X:\AppleMobileDeviceSupport64.msi' }
+            Mock Test-SetupAppleUsbPackage {}
             Mock Invoke-SetupAppleUsbInstaller { 0 }
             Mock Start-SetupAppleUsbService {}
             Mock Get-SetupMediaCapability { [pscustomobject]@{ Name = 'Media.MediaFeaturePack~~~~0.0.1.0'; State = 'NotPresent' } }
@@ -32,6 +34,8 @@ InModuleScope Setup-PrerequisitesSupport {
             $state = Initialize-SetupPrerequisites -AppleInstallerPath 'X:\AppleUSBSetup.exe' -LogDirectory $TestDrive
             $state.RestartRequired | Should Be $false
             Assert-MockCalled Test-SetupAppleUsbInstaller -Scope It -Times 1
+            Assert-MockCalled Expand-SetupAppleUsbPackage -Scope It -Times 1
+            Assert-MockCalled Test-SetupAppleUsbPackage -Scope It -Times 1
             Assert-MockCalled Invoke-SetupAppleUsbInstaller -Scope It -Times 1
             Assert-MockCalled Get-SetupAppleUsbState -Scope It -Times 2
             Assert-MockCalled Start-SetupAppleUsbService -Scope It -Times 1
@@ -55,6 +59,13 @@ InModuleScope Setup-PrerequisitesSupport {
             Mock Invoke-SetupAppleUsbInstaller { 1603 }
             { Initialize-SetupPrerequisites -AppleInstallerPath 'X:\AppleUSBSetup.exe' -LogDirectory $TestDrive } | Should Throw
             Assert-MockCalled Start-SetupAppleUsbService -Scope It -Times 0
+        }
+
+        It 'never runs an extracted USB package that fails its independent verification' {
+            Mock Get-SetupAppleUsbState { [pscustomobject]@{ Ready = $false } }
+            Mock Test-SetupAppleUsbPackage { throw 'USB MSI mismatch' }
+            { Initialize-SetupPrerequisites -AppleInstallerPath 'X:\AppleUSBSetup.exe' -LogDirectory $TestDrive } | Should Throw
+            Assert-MockCalled Invoke-SetupAppleUsbInstaller -Scope It -Times 0
         }
 
         It 'does not trust a zero installer exit code without working installed files' {
@@ -156,15 +167,24 @@ InModuleScope Setup-PrerequisitesSupport {
         It 'rejects a missing download' {
             { Test-SetupAppleUsbInstaller -Path (Join-Path $TestDrive 'absent.exe') } | Should Throw
         }
+
+        It 'checks the USB MSI against its own hash independently of the outer download' {
+            Mock Get-SetupAppleUsbDefinition { [pscustomobject]@{ SHA256 = ('A' * 64); UsbPackageSHA256 = ('B' * 64) } }
+            { Test-SetupAppleUsbPackage -Path $script:downloadPath } | Should Throw
+            Mock Get-FileHash { [pscustomobject]@{ Hash = ('B' * 64) } }
+            { Test-SetupAppleUsbPackage -Path $script:downloadPath } | Should Not Throw
+        }
     }
 
     Describe 'Apple installer invocation' {
         It 'runs hidden, waits and explicitly forbids an automatic reboot' {
             Mock Start-Process { [pscustomobject]@{ ExitCode = 3010 } }
-            Invoke-SetupAppleUsbInstaller -Path 'X:\AppleUSBSetup.exe' -LogPath 'X:\logs with spaces\AppleUSB-install.log' | Should Be 3010
+            Invoke-SetupAppleUsbInstaller -Path 'X:\AppleMobileDeviceSupport64.msi' -LogPath 'X:\logs with spaces\AppleUSB-install.log' | Should Be 3010
             Assert-MockCalled Start-Process -Scope It -Times 1 -ParameterFilter {
                 $WindowStyle -eq 'Hidden' -and $Wait -and $PassThru -and
-                ($ArgumentList -contains '/quiet') -and ($ArgumentList -contains '/norestart') -and
+                ($FilePath -eq (Join-Path $env:windir 'System32\msiexec.exe')) -and
+                ($ArgumentList -contains '/qn') -and ($ArgumentList -contains '/norestart') -and
+                ($ArgumentList -contains 'REBOOT=ReallySuppress') -and
                 ($ArgumentList -contains '"X:\logs with spaces\AppleUSB-install.log"')
             }
         }

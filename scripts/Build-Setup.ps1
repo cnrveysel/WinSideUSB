@@ -167,7 +167,7 @@ $null = Test-SetupPackage -PackageDir (Join-Path $payloadDir 'driver') -DriverMo
 $manifest = [ordered]@{
     Version = $Version; DriverMode = $DriverMode; Architecture = 'x64'; MinimumWindowsBuild = 22000
     RuntimeVersion = $runtimeVersion.ToString(); CreatedUtc = [DateTime]::UtcNow.ToString('o')
-    AppleUsbPrerequisite = [ordered]@{ Version = $applePrerequisite.Version; Url = $applePrerequisite.Url; SHA256 = $applePrerequisite.SHA256; DownloadedOnlyIfMissing = $true }
+    AppleUsbPrerequisite = [ordered]@{ Version = $applePrerequisite.Version; Url = $applePrerequisite.Url; SHA256 = $applePrerequisite.SHA256; UsbPackageVersion = $applePrerequisite.UsbPackageVersion; UsbPackageSHA256 = $applePrerequisite.UsbPackageSHA256; DownloadedOnlyIfMissing = $true }
     Files = @(Get-ChildItem -LiteralPath $payloadDir -File -Recurse | ForEach-Object {
         [ordered]@{ Path = $_.FullName.Substring($payloadDir.Length + 1); SHA256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
     })

@@ -64,15 +64,15 @@ Name: english; MessagesFile: compiler:Default.isl
 
 [CustomMessages]
 turkish.WelcomeLabel1=WinSideUSB'ye hoş geldiniz
-turkish.WelcomeLabel2=iPad'inizi Windows'un ikinci ekranına dönüştürün.%n%nKurulum uygulamayı, sanal ekran sürücüsünü ve gerekli Windows bileşenlerini hazırlar.%n%nApple USB desteği eksikse Apple'ın iTunes paketi indirilip kurulur (yaklaşık 200 MB). Windows N'de eksik medya bileşenleri de indirilir. Gerekli indirmeler için internet bağlantısı gerekir. iPad uygulamasını ayrıca açın.
+turkish.WelcomeLabel2=iPad'inizi Windows'un ikinci ekranına dönüştürün.%n%nKurulum uygulamayı, sanal ekran sürücüsünü ve gerekli Windows bileşenlerini hazırlar.%n%nApple USB desteği eksikse Apple'ın resmi paketi indirilip yalnız USB bileşeni kurulur (yaklaşık 200 MB). Windows N'de eksik medya bileşenleri de indirilir. Gerekli indirmeler için internet bağlantısı gerekir. iPad uygulamasını ayrıca açın.
 english.WelcomeLabel1=Welcome to WinSideUSB
-english.WelcomeLabel2=Turn your iPad into a second Windows display.%n%nSetup installs the app, virtual display driver, and Windows components.%n%nIf Apple USB support is missing, setup downloads and installs Apple's iTunes package (about 200 MB). Missing Windows N media components are also downloaded. These downloads require internet access. Open the iPad app separately.
+english.WelcomeLabel2=Turn your iPad into a second Windows display.%n%nSetup installs the app, virtual display driver, and Windows components.%n%nIf Apple USB support is missing, setup downloads Apple's official package (about 200 MB) and installs its USB component. Missing Windows N media components are also downloaded. These downloads require internet access. Open the iPad app separately.
 turkish.DevelopmentNotice=Bu bir geliştirme sürümüdür. Test imzalı sürücü için Windows test-signing açık ve Secure Boot kapalı olmalıdır. Kurulum bu ayarları değiştirmez.
 english.DevelopmentNotice=This is a development preview. Its test-signed driver requires Windows test-signing on and Secure Boot off. Setup does not change these settings.
 turkish.AppleButton=Apple lisans koşulları
 english.AppleButton=Apple license terms
-turkish.AppleUsbTask=Gerekirse Apple USB desteğini iTunes ile kur (Apple koşullarını kabul ediyorum)
-english.AppleUsbTask=Install missing Apple USB support using iTunes (I accept Apple's terms)
+turkish.AppleUsbTask=Apple USB desteğini otomatik hazırla (Apple koşullarını kabul ediyorum)
+english.AppleUsbTask=Prepare missing Apple USB support (I accept Apple's terms)
 turkish.MediaTask=Windows N'de eksik medya bileşenlerini hazırla
 english.MediaTask=Prepare missing media components on Windows N
 turkish.AppleDownloadTitle=Apple USB desteği indiriliyor
@@ -275,13 +275,11 @@ begin
     Result := ReadMessage(MessageFile, CustomMessage('SetupFailed'));
     exit;
   end;
-  WizardForm.StatusLabel.Caption := CustomMessage('PrerequisiteProgress');
-  Code := RunPrerequisites('Prepare', MessageFile);
-  if (Code <> 0) and (Code <> 3010) then begin
+  Code := RunPrerequisites('CloseApp', MessageFile);
+  if Code <> 0 then begin
     Result := ReadMessage(MessageFile, CustomMessage('SetupFailed'));
     exit;
   end;
-  RestartRequired := RestartRequired or (Code = 3010);
   if RuntimeNeeded then begin
     WizardForm.StatusLabel.Caption := CustomMessage('RuntimeProgress');
     ExtractTemporaryFile('vc_redist.x64.exe');
@@ -301,6 +299,13 @@ begin
       exit;
     end;
   end;
+  WizardForm.StatusLabel.Caption := CustomMessage('PrerequisiteProgress');
+  Code := RunPrerequisites('Prepare', MessageFile);
+  if (Code <> 0) and (Code <> 3010) then begin
+    Result := ReadMessage(MessageFile, CustomMessage('SetupFailed'));
+    exit;
+  end;
+  RestartRequired := RestartRequired or (Code = 3010);
   { An empty state left by a failed attempt is not an existing installed app. }
   HadState := RegKeyExists(HKLM64,
     'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{B1638B2B-88F8-40A2-B7C0-B75F2EE9BA5F}_is1');

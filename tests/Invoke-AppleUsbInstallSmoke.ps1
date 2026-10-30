@@ -11,11 +11,16 @@ $installer = Join-Path $OutputDirectory 'iTunes64Setup.exe'
 $ProgressPreference = 'SilentlyContinue'
 Invoke-WebRequest -UseBasicParsing -Uri $definition.Url -OutFile $installer -TimeoutSec 900
 Test-SetupAppleUsbInstaller -Path $installer
+$usbPackage = & (Get-Module Setup-PrerequisitesSupport) {
+    param($InstallerPath, $Directory)
+    Expand-SetupAppleUsbPackage -Path $InstallerPath -DestinationDirectory $Directory
+} $installer $OutputDirectory
+Test-SetupAppleUsbPackage -Path $usbPackage
 $logPath = Join-Path $OutputDirectory 'AppleUSB-install.log'
 $code = & (Get-Module Setup-PrerequisitesSupport) {
     param($InstallerPath, $InstallerLogPath)
     Invoke-SetupAppleUsbInstaller -Path $InstallerPath -LogPath $InstallerLogPath
-} $installer $logPath
+} $usbPackage $logPath
 if ($code -notin @(0, 3010)) { throw "The real Apple installer failed (exit $code)." }
 $after = Get-SetupAppleUsbState
 if (-not $after.Ready) { throw 'Apple installation did not create usable USB service files.' }
@@ -25,6 +30,8 @@ if ($service.Status -ne 'Running') { throw 'Apple USB support did not become rea
 [ordered]@{
     Version = $definition.Version
     SHA256 = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
+    UsbPackageVersion = $definition.UsbPackageVersion
+    UsbPackageSHA256 = (Get-FileHash -LiteralPath $usbPackage -Algorithm SHA256).Hash
     PreviouslyInstalled = [bool]$before.Ready
     ExitCode = $code
     ServiceRunning = $true

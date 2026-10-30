@@ -5,6 +5,8 @@ function Get-SetupAppleUsbDefinition {
     $uri = [uri]$definition.Url
     if ($uri.Scheme -ne 'https' -or $uri.Host -ne 'secure-appldnld.apple.com' -or
         $definition.SHA256 -notmatch '^[A-Fa-f0-9]{64}$' -or
+        $definition.UsbPackageSHA256 -notmatch '^[A-Fa-f0-9]{64}$' -or
+        $definition.CabinetOffset -le 0 -or $definition.CabinetLength -le 36 -or
         $definition.Version -notmatch '^\d+\.\d+\.\d+\.\d+$') {
         throw 'The reviewed Apple USB prerequisite definition is invalid.'
     }
@@ -27,11 +29,10 @@ function Get-SetupAppleUsbState {
     }
 }
 
-function Test-SetupAppleUsbInstaller {
-    param([Parameter(Mandatory = $true)][string]$Path)
-    $definition = Get-SetupAppleUsbDefinition
+function Assert-SetupAppleFile {
+    param([string]$Path, [string]$SHA256)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw 'The Apple USB installer download is missing.' }
-    if ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -ne $definition.SHA256) {
+    if ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -ne $SHA256) {
         throw 'Apple installer checksum verification failed. Nothing was run; retry the download.'
     }
     $signature = Get-AuthenticodeSignature -LiteralPath $Path
@@ -41,9 +42,63 @@ function Test-SetupAppleUsbInstaller {
     }
 }
 
+function Test-SetupAppleUsbInstaller {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    Assert-SetupAppleFile -Path $Path -SHA256 (Get-SetupAppleUsbDefinition).SHA256
+}
+
+function Test-SetupAppleUsbPackage {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    Assert-SetupAppleFile -Path $Path -SHA256 (Get-SetupAppleUsbDefinition).UsbPackageSHA256
+}
+
+function Expand-SetupAppleUsbPackage {
+    param([string]$Path, [string]$DestinationDirectory)
+    $definition = Get-SetupAppleUsbDefinition
+    $folder = Join-Path $DestinationDirectory ('apple-usb-' + [guid]::NewGuid().ToString('N'))
+    $null = New-Item -ItemType Directory -Path $folder -Force
+    $cabinetPath = Join-Path $folder 'AppleUSB.cab'
+    $inputStream = [IO.File]::OpenRead($Path)
+    $outputStream = $null
+    try {
+        if ([long]$definition.CabinetOffset + [long]$definition.CabinetLength -gt $inputStream.Length) {
+            throw 'The reviewed Apple cabinet is outside the downloaded file.'
+        }
+        $null = $inputStream.Seek($definition.CabinetOffset, [IO.SeekOrigin]::Begin)
+        $header = New-Object byte[] 12
+        if ($inputStream.Read($header, 0, $header.Length) -ne $header.Length -or
+            [Text.Encoding]::ASCII.GetString($header, 0, 4) -ne 'MSCF' -or
+            [BitConverter]::ToUInt32($header, 8) -ne $definition.CabinetLength) {
+            throw 'The reviewed Apple cabinet header does not match.'
+        }
+        $null = $inputStream.Seek($definition.CabinetOffset, [IO.SeekOrigin]::Begin)
+        $outputStream = [IO.File]::Create($cabinetPath)
+        $remaining = [long]$definition.CabinetLength
+        $buffer = New-Object byte[] 1048576
+        while ($remaining -gt 0) {
+            $read = $inputStream.Read($buffer, 0, [int][Math]::Min($remaining, $buffer.Length))
+            if ($read -eq 0) { throw 'The Apple cabinet ended unexpectedly.' }
+            $outputStream.Write($buffer, 0, $read)
+            $remaining -= $read
+        }
+    } finally {
+        if ($outputStream) { $outputStream.Dispose() }
+        $inputStream.Dispose()
+    }
+    # Windows' built-in cabinet tool extracts only this fixed member name.
+    $expandOutput = & (Join-Path $env:windir 'System32\expand.exe') '-F:AppleMobileDeviceSupport64.msi' $cabinetPath $folder 2>&1
+    $expandCode = $LASTEXITCODE
+    $expandOutput | Set-Content -LiteralPath (Join-Path $DestinationDirectory 'AppleUSB-extract.log') -Encoding UTF8
+    $packagePath = Join-Path $folder 'AppleMobileDeviceSupport64.msi'
+    if ($expandCode -ne 0 -or -not (Test-Path -LiteralPath $packagePath -PathType Leaf)) {
+        throw 'Windows could not extract the Apple USB support package. Retry setup.'
+    }
+    $packagePath
+}
+
 function Invoke-SetupAppleUsbInstaller {
     param([string]$Path, [string]$LogPath)
-    $process = Start-Process -FilePath $Path -ArgumentList @('/quiet', '/norestart', '/log', ('"' + $LogPath + '"')) -WindowStyle Hidden -Wait -PassThru
+    $process = Start-Process -FilePath (Join-Path $env:windir 'System32\msiexec.exe') -ArgumentList @('/i', ('"' + $Path + '"'), '/qn', '/norestart', 'REBOOT=ReallySuppress', '/L*v', ('"' + $LogPath + '"')) -WindowStyle Hidden -Wait -PassThru
     [int]$process.ExitCode
 }
 
@@ -102,10 +157,12 @@ function Initialize-SetupPrerequisites {
     $apple = Get-SetupAppleUsbState
     if (-not $apple.Ready) {
         if (-not $AppleInstallerPath) {
-            throw 'Apple USB support is missing. Enable the Apple USB support option in setup so it can download and install iTunes.'
+            throw 'Apple USB support is missing. Enable the Apple USB support option so setup can download and install the required component.'
         }
         Test-SetupAppleUsbInstaller -Path $AppleInstallerPath
-        $code = Invoke-SetupAppleUsbInstaller -Path $AppleInstallerPath -LogPath (Join-Path $LogDirectory 'AppleUSB-install.log')
+        $usbPackage = Expand-SetupAppleUsbPackage -Path $AppleInstallerPath -DestinationDirectory $LogDirectory
+        Test-SetupAppleUsbPackage -Path $usbPackage
+        $code = Invoke-SetupAppleUsbInstaller -Path $usbPackage -LogPath (Join-Path $LogDirectory 'AppleUSB-install.log')
         if ($code -notin @(0, 3010, 1638)) {
             throw "Apple USB installation failed (exit $code). Retry setup after other installations finish; details are in AppleUSB-install.log."
         }
@@ -125,4 +182,4 @@ function Initialize-SetupPrerequisites {
     [pscustomobject]@{ RestartRequired = [bool]$restart }
 }
 
-Export-ModuleMember -Function Get-SetupAppleUsbDefinition, Get-SetupAppleUsbState, Test-SetupAppleUsbInstaller, Test-SetupMediaFoundation, Initialize-SetupPrerequisites
+Export-ModuleMember -Function Get-SetupAppleUsbDefinition, Get-SetupAppleUsbState, Test-SetupAppleUsbInstaller, Test-SetupAppleUsbPackage, Test-SetupMediaFoundation, Initialize-SetupPrerequisites
