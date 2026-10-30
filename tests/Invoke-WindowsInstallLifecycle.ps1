@@ -157,14 +157,20 @@ namespace WinSideUSB {
 function Check-DriverLoad {
     $state=Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
     $id=$state.DeviceIds[0]
+    $module=Import-Module (Join-Path $appDir 'scripts\Setup-DriverSupport.psm1') -Force -PassThru
+    & $module { Initialize-SetupNative }
     try {
-        Enable-PnpDevice -InstanceId $id -Confirm:$false
+        # Match the service's global + current-profile SetupAPI property change.
+        # Enable-PnpDevice only enables the live node and leaves setup's saved
+        # CONFIGFLAG_DISABLED intact.
+        $restart=[WinSideUSB.SetupNative]::SetDeviceEnabled($id,'Root\MttVDD',$true)
+        Assert (-not $restart) 'Enabling the display unexpectedly requires another restart.'
         Start-Sleep -Seconds 5
         $problem=[int](Get-PnpDeviceProperty -InstanceId $id -KeyName DEVPKEY_Device_ProblemCode).Data
         Event 'driver-enabled' @{device=$id;problemCode=$problem}
         Assert ($problem -eq 0) 'The installed driver could not start after reboot.'
     } finally {
-        Disable-PnpDevice -InstanceId $id -Confirm:$false
+        $null=[WinSideUSB.SetupNative]::SetDeviceEnabled($id,'Root\MttVDD',$false)
         $problem=[int](Get-PnpDeviceProperty -InstanceId $id -KeyName DEVPKEY_Device_ProblemCode).Data
         Assert ($problem -eq 22) 'The test did not restore the display to disabled idle state.'
     }
